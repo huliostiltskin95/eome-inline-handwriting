@@ -171,9 +171,13 @@ export class InlineInkController {
         this.clearPreviews();
         return;
       }
-      void this.view.refreshRenderedAttachments()
-        .catch(error => console.error('Inline handwriting refresh failed:', error))
-        .finally(() => this.clearPreviews());
+      void this.view.refreshRenderedAttachments().then(
+        () => this.clearPreviews(),
+        (error) => {
+          console.error('Inline handwriting refresh failed:', error);
+          this.clearPreviews();
+        }
+      );
     }, 400);
   }
 
