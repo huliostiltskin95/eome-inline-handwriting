@@ -1,0 +1,10 @@
+{
+  "id": "eome-inline-handwriting",
+  "name": "EOME Inline Handwriting",
+  "version": "0.2.3",
+  "minAppVersion": "1.8.7",
+  "description": "Mindmap Markdown con scrittura diretta Apple Pencil nei nodi SVG (fork sperimentale di EOME).",
+  "author": "Kornelius Paede",
+  "authorUrl": "https://dramaturgie.lol/",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,47 @@
+name: Build and publish BRAT prerelease
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Compile plugin
+        run: npm run build
+      - name: Verify BRAT assets
+        run: |
+          test -s main.js
+          test -s manifest.json
+          test -s styles.css
+      - name: Create or update GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("manifest.json")).version')"
+          if gh release view "$VERSION" > /dev/null 2>&1; then
+            gh release upload "$VERSION" main.js manifest.json styles.css --clobber
+          else
+            gh release create "$VERSION" main.js manifest.json styles.css \
+              --title "EOME Inline Handwriting $VERSION" \
+              --notes "Versione sperimentale: scrittura Apple Pencil direttamente nei nodi SVG. Non collaudata su hardware reale." \
+              --prerelease \
+              --target "$GITHUB_SHA"
+          fi

@@ -1,0 +1,32 @@
+# vscode
+.vscode 
+
+# Intellij
+*.iml
+.idea
+
+# npm
+node_modules
+
+# Local reference source
+lineage_src/
+
+# Don't include the compiled main.js file in the repo.
+# They should be uploaded to GitHub releases instead.
+main.js
+
+# Exclude sourcemaps
+*.map
+
+# obsidian
+data.json
+
+# Exclude macOS Finder (System Explorer) View States
+.DS_Store
+
+# Exclude iCloud/Finder conflict copies
+* 2
+* 2.*
+
+# Arbeitsdatei fuer den Review-Stand, kein Bestandteil des Plugins
+"fix this"
