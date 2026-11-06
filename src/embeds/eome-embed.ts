@@ -411,11 +411,17 @@ export async function renderMindmapEomeEmbed(
     add.addEventListener('click', () => {
       if (inlineContext) {
         add.disabled = true;
-        void createFirstInlineDrawing(inlineContext).catch(error => {
-          console.error('EOME first node advanced editor failed', error);
-          new Notice('Impossibile aprire l’editor del primo nodo: ' +
-            (error instanceof Error ? error.message : String(error)));
-        }).finally(() => { if (add.isConnected) add.disabled = false; });
+        void (async () => {
+          try {
+            await createFirstInlineDrawing(inlineContext);
+          } catch (error) {
+            console.error('EOME first node advanced editor failed', error);
+            new Notice('Impossibile aprire l’editor del primo nodo: ' +
+              (error instanceof Error ? error.message : String(error)));
+          } finally {
+            if (add.isConnected) add.disabled = false;
+          }
+        })();
       } else void openSelected();
     });
     return;
