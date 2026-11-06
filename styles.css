@@ -2056,3 +2056,64 @@ body.is-mobile .eome-drawing-footer button,
     flex: 1 1 auto;
   }
 }
+
+
+/* 0.2.5: handwritten nodes are ink on an invisible hit target, not cards.
+   The hidden overlay box and measured padding remain interactive on iPad. */
+.mindmap-overlay,
+.mindmap-wrapper > .mindmap-overlay[data-overlay] {
+  background: transparent;
+  background-color: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.mindmap-wrapper .mindmap-overlay.checkbox-checked {
+  background: transparent;
+  background-color: transparent;
+}
+.mindmap-wrapper [data-overlay].selected,
+.mindmap-wrapper [data-overlay].editing {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.mindmap-wrapper [data-overlay] > .mindmap-node-selection-ring {
+  inset: -3px 5px -5px;
+  border: 0;
+  border-bottom: 2px solid var(--interactive-accent);
+  border-radius: 0;
+}
+.mindmap-wrapper.is-inline-ink-enabled .mindmap-overlay:has(.markdown-rendered img) {
+  outline: none;
+}
+/* 0.2.8: cycle the relation arrow with one finger/Pencil tap.
+   The unobtrusive outside-the-ink glyph never covers the SVG itself. */
+.mindmap-wrapper button.eome-edge-arrow {
+  position: absolute;
+  bottom: -17px;
+  left: 4px;
+  z-index: 25;
+  display: none;
+  min-width: 35px;
+  min-height: 30px;
+  padding: 0 5px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-size: 19px;
+  line-height: 1;
+  text-align: center;
+  box-shadow: none;
+  cursor: pointer;
+}
+.mindmap-wrapper .mindmap-overlay.hovering > .eome-edge-arrow,
+.mindmap-wrapper .mindmap-overlay.selected > .eome-edge-arrow {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+.mindmap-wrapper button.eome-edge-arrow:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+}

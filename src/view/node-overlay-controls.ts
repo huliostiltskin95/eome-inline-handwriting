@@ -152,5 +152,24 @@ export function appendNodeControls(box: HTMLElement, node: OutlineNode, view: Mi
     }).open();
   });
 
+  const hasParent = view.getFlatNodes().some((possibleParent) =>
+    possibleParent.children.some((child) => child.line === node.line)
+  );
+  if (hasParent) {
+    const arrow = box.createEl('button', { cls: 'eome-edge-arrow' });
+    arrow.type = 'button';
+    arrow.dataset.nodeLine = String(node.line);
+    const glyph = { none: '—', start: '←', end: '→', both: '↔' }[view.getIncomingEdgeArrowMode(node)];
+    arrow.setText(glyph);
+    arrow.setAttribute('aria-label', 'Cambia freccia del collegamento');
+    arrow.setAttribute('title', 'Freccia: nessuna, finale, iniziale o doppia');
+    arrow.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!view.file) return;
+      void view.cycleIncomingEdgeArrow(node);
+    });
+  }
+
   box.append(controls, deleteButton);
 }

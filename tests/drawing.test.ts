@@ -1006,8 +1006,38 @@ describe('editable SVG drawing format', () => {
     const parsed = parseDrawingSvg(svg);
     expect(svg).toContain('<svg');
     expect(svg).toContain('eome-drawing-data');
-    expect(svg).toContain('fill="#ffffff"');
+    expect(svg).not.toContain('<rect ');
+    expect(svg).toContain('fill="#123456"');
     expect(parsed?.items).toEqual(items);
+  });
+
+  it('generates a compact transparent blank sheet without rasterization', () => {
+    const svg = createDrawingSvg([]);
+    expect(svg).toContain('viewBox="-20 -20 400 200"');
+    expect(svg).not.toContain('<rect ');
+    expect(parseDrawingSvg(svg)?.items).toEqual([]);
+  });
+
+  it('preserves intentionally white pen strokes when the background is transparent', () => {
+    const items = [{
+      id: 'light-ink',
+      type: 'pen',
+      data: {
+        path: [point(10, 10, 0.3), point(90, 40, 0.9)],
+        options: { color: '#ffffff', size: 5 }
+      }
+    }];
+    const svg = createDrawingSvg(items);
+    expect(svg).toContain('fill="#ffffff"');
+    expect(svg).not.toContain('<rect ');
+    expect(parseDrawingSvg(svg)?.items).toEqual(items);
+  });
+
+  it('keeps a legacy white backing only when requested during editing', () => {
+    const legacy = createDrawingSvg([], undefined, undefined, true);
+    const transparent = createDrawingSvg([]);
+    expect(legacy).toContain('<rect ');
+    expect(transparent).not.toContain('<rect ');
   });
 
   it('recognizes standard Obsidian SVG embeds with aliases', () => {

@@ -1,7 +1,7 @@
 import { Notice, TFile } from 'obsidian';
 import type { MindmapView } from '../view/mindmap-view';
 import { extractDrawingLink } from './drawing-link';
-import { createDrawingSvg, parseDrawingSvg } from './drawing-svg';
+import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from './drawing-svg';
 import type { ExportedDrawingItem, InkPoint } from './types';
 
 interface Sample {
@@ -40,6 +40,7 @@ export class InlineInkController {
   private readonly queues = new Map<string, Promise<void>>();
   private readonly pendingPreviews = new Set<SVGSVGElement>();
   private refreshTimer: number | null = null;
+  private readonly compactTimers = new Map<string, number>();
 
   constructor(private readonly view: MindmapView, private readonly wrapper: HTMLElement) {}
 
@@ -62,6 +63,13 @@ export class InlineInkController {
     if (rect.width < 1 || rect.height < 1 ||
         event.clientX < rect.left || event.clientX > rect.right ||
         event.clientY < rect.top || event.clientY > rect.bottom) return false;
+
+    // Avoid changing the SVG viewBox during a burst of handwritten strokes.
+    const compactTimer = this.compactTimers.get(file.path);
+    if (compactTimer !== undefined) {
+      window.clearTimeout(compactTimer);
+      this.compactTimers.delete(file.path);
+    }
 
     const doc = this.wrapper.ownerDocument;
     const preview = doc.createElementNS(NS, 'svg');
@@ -151,6 +159,7 @@ export class InlineInkController {
     try {
       await current;
       this.scheduleRefresh();
+      this.scheduleCompaction(session.attachment);
     } catch (error) {
       console.error('Inline handwriting save failed:', error);
       session.preview.remove();
@@ -181,6 +190,47 @@ export class InlineInkController {
         }
       );
     }, 400);
+  }
+
+  /**
+   * Auto-fit the SVG to its real vector bounds only after the pen has rested.
+   * Keeping the viewBox fixed during the stroke prevents the live writing
+   * surface from shifting under Apple Pencil with every new letter.
+   */
+  private scheduleCompaction(attachment: TFile): void {
+    const previous = this.compactTimers.get(attachment.path);
+    if (previous !== undefined) window.clearTimeout(previous);
+    const timeout = window.setTimeout(() => {
+      this.compactTimers.delete(attachment.path);
+      if (this.session?.attachment.path === attachment.path ||
+          this.queues.has(attachment.path)) {
+        this.scheduleCompaction(attachment);
+        return;
+      }
+      if (!this.wrapper.isConnected) return;
+      void this.compactDrawing(attachment).catch((error) => {
+        console.warn('Could not adapt handwriting SVG to its stroke bounds:', error);
+      });
+    }, 1800);
+    this.compactTimers.set(attachment.path, timeout);
+  }
+
+  private async compactDrawing(attachment: TFile): Promise<void> {
+    if (this.session?.attachment.path === attachment.path || this.queues.has(attachment.path)) return;
+    const before = await this.view.app.vault.read(attachment);
+    const doc = parseDrawingSvg(before);
+    if (!doc || doc.items.length === 0) return;
+    const compacted = createDrawingSvg(doc.items, doc.createdAt,
+      undefined, hasLegacyOpaqueBacking(before));
+    const oldBounds = getViewBox(before);
+    const newBounds = getViewBox(compacted);
+    if (!oldBounds || !newBounds || oldBounds.every((value, i) => value === newBounds[i])) return;
+    if (this.session?.attachment.path === attachment.path || this.queues.has(attachment.path)) return;
+    // Another editor can update the same attachment; do not silently overwrite.
+    if (await this.view.app.vault.read(attachment) !== before) return;
+    await this.view.app.vault.modify(attachment, compacted);
+    this.view.attachmentVersions.markCurrent(attachment);
+    await this.view.refreshRenderedAttachments(attachment);
   }
 
   private clearPreviews(): void {
@@ -215,7 +265,7 @@ export class InlineInkController {
     }
     await this.view.app.vault.modify(
       session.attachment,
-      createDrawingSvg([...doc.items, item], doc.createdAt, { x, y, width: w, height: h })
+      createDrawingSvg([...doc.items, item], doc.createdAt, { x, y, width: w, height: h }, hasLegacyOpaqueBacking(before))
     );
     this.view.attachmentVersions.markCurrent(session.attachment);
   }

@@ -1,9 +1,9 @@
 {
   "id": "eome-inline-handwriting",
   "name": "EOME Inline Handwriting",
-  "version": "0.2.4",
+  "version": "0.2.8",
   "minAppVersion": "1.8.7",
-  "description": "Mindmap pen-first: Apple Pencil sui nodi SVG, editor espanso con aggiunta rapida di figli e fratelli.",
+  "description": "Mappe manoscritte trasparenti, dimensionamento SVG automatico, collegamenti a L e frecce configurabili.",
   "author": "Kornelius Paede",
   "authorUrl": "https://dramaturgie.lol/",
   "isDesktopOnly": false

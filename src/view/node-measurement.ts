@@ -1,8 +1,10 @@
-import { MarkdownRenderer } from 'obsidian';
+import { MarkdownRenderer, TFile } from 'obsidian';
 import type { OutlineNode } from '../utils/outline';
 import { openInternalLink } from '../utils/outline';
 import type { MindmapView } from './mindmap-view';
 import { hasUnrenderedExcalidrawEmbed } from '../drawing/excalidraw-integration';
+import { extractDrawingLink } from '../drawing/drawing-link';
+import { parseDrawingSvg } from '../drawing/drawing-svg';
 
 function waitForImages(container: HTMLElement): Promise<unknown> {
   return Promise.all(Array.from(container.querySelectorAll('img')).map((img) => {
@@ -136,6 +138,31 @@ export async function measureNodesForLayout(
           node.scaleFactor = cachedMeasurement.scaleFactor;
         }
         continue;
+      }
+
+      // Handwriting nodes have intrinsic SVG geometry. Measure the actual
+      // viewBox instead of forcing every word into a 300px-wide card.
+      const drawingLink = extractDrawingLink(node.text);
+      const attachment = drawingLink && view.file
+        ? view.app.metadataCache.getFirstLinkpathDest(drawingLink, view.file.path) : null;
+      if (attachment instanceof TFile && attachment.extension.toLowerCase() === 'svg') {
+        try {
+          const source = await view.app.vault.read(attachment);
+          const match = /\bviewBox\s*=\s*["']([^"']+)["']/i.exec(source);
+          const parts = match?.[1].trim().split(/[\s,]+/).map(Number);
+          if (parseDrawingSvg(source) && parts?.length === 4
+              && parts.every(Number.isFinite) && parts[2] > 0 && parts[3] > 0) {
+            const [ , , rawW, rawH ] = parts;
+            const w = Math.max(80, Math.min(targetWidth, Math.ceil(rawW + 22)));
+            const h = Math.max(60, Math.ceil((w - 22) * rawH / rawW + 30));
+            const measured = { w, h };
+            sizeMap.set(node.line, measured);
+            view.measurementCache.set(measurementKey, measured);
+            continue;
+          }
+        } catch (error) {
+          console.warn('Could not measure handwriting SVG; using rendered size:', error);
+        }
       }
 
       const tmpBox = measureContainer.createDiv({ cls: 'mindmap-measure-box' });

@@ -283,7 +283,8 @@ function itemToSvg(item: ExportedDrawingItem): string {
 export function createDrawingSvg(
   items: ExportedDrawingItem[],
   previousCreatedAt?: string,
-  fixedCanvas?: { x: number; y: number; width: number; height: number }
+  fixedCanvas?: { x: number; y: number; width: number; height: number },
+  preserveOpaqueBacking = false
 ): string {
   const now = new Date().toISOString();
   const document: DrawingDocument = {
@@ -295,14 +296,24 @@ export function createDrawingSvg(
       minX: Math.min(result.minX, current.minX), minY: Math.min(result.minY, current.minY),
       maxX: Math.max(result.maxX, current.maxX), maxY: Math.max(result.maxY, current.maxY),
     }), bounds[0])
-    : { minX: 0, minY: 0, maxX: 640, maxY: 400 };
+    : { minX: 0, minY: 0, maxX: 360, maxY: 160 };
   const x = fixedCanvas?.x ?? (combined.minX - DRAWING_PADDING);
   const y = fixedCanvas?.y ?? (combined.minY - DRAWING_PADDING);
   const width = fixedCanvas?.width ?? Math.max(80, combined.maxX - combined.minX + DRAWING_PADDING * 2);
   const height = fixedCanvas?.height ?? Math.max(60, combined.maxY - combined.minY + DRAWING_PADDING * 2);
   const body = items.map(itemToSvg).join('');
   const metadata = encodeBase64(JSON.stringify(document));
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Drawing">\n<metadata id="${METADATA_ID}" data-encoding="base64">${metadata}</metadata>\n<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff"/>\n${body}\n</svg>\n`;
+  // The editor supplies its own white paper. New saved SVG nodes contain only
+  // vector artwork; older opaque drawings may retain the legacy white sheet.
+  const background = preserveOpaqueBacking
+    ? `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff"/>\n`
+    : '';
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="${x} ${y} ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Drawing">\n<metadata id="${METADATA_ID}" data-encoding="base64">${metadata}</metadata>\n${background}${body}\n</svg>\n`;
+}
+
+/** The old EOME exporter placed this exact white canvas immediately after the metadata. */
+export function hasLegacyOpaqueBacking(svg: string): boolean {
+  return /<\/metadata>\s*<rect\s+x="[^"]+"\s+y="[^"]+"\s+width="[^"]+"\s+height="[^"]+"\s+fill="#ffffff"\s*\/>/i.test(svg);
 }
 
 export function parseDrawingSvg(svg: string): DrawingDocument | null {

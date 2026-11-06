@@ -80,6 +80,13 @@ import {
 } from './clipboard';
 import { eventPathContainsSelector, eventTargetsObsidianMenu } from './menu-dismissal';
 import { MindmapGestureCoordinator } from './gesture-coordinator';
+import {
+  type EdgeArrowMode,
+  readEdgeArrowModes,
+  arrowModeForNode,
+  arrowShapesForMode,
+  cycleIncomingEdgeArrow
+} from './edge-arrows';
 import { AnimationFrameHost, RenderLifecycle } from './render-lifecycle';
 
 export type { LayoutOptions, MindmapViewState };
@@ -96,6 +103,30 @@ export class MindmapView extends TextFileView {
   public selectedNodeLines: Set<number> = new Set();
   public pendingEditNodeLine: number | null = null;
   public inlineInkEnabled = true;
+  public edgeArrowModes: Record<string, EdgeArrowMode> = Object.create(null);
+
+  public getIncomingEdgeArrowMode(node: OutlineNode): EdgeArrowMode {
+    return arrowModeForNode(this, node);
+  }
+
+  public cycleIncomingEdgeArrow(node: OutlineNode): Promise<void> {
+    return cycleIncomingEdgeArrow(this, node);
+  }
+
+  public updateIncomingEdgeArrow(node: OutlineNode): void {
+    const shapes = arrowShapesForMode(arrowModeForNode(this, node));
+    if (this.cy) {
+      const targetId = `n${node.line}`;
+      this.cy.edges().filter((edge) => edge.data('target') === targetId).forEach((edge) => {
+        edge.data('sourceArrow', shapes.sourceArrow);
+        edge.data('targetArrow', shapes.targetArrow);
+      });
+    }
+    const glyph = { none: '—', start: '←', end: '→', both: '↔' }[arrowModeForNode(this, node)];
+    this.wrapper?.querySelectorAll<HTMLElement>('.eome-edge-arrow[data-node-line]').forEach((button) => {
+      if (Number(button.dataset.nodeLine) === node.line) button.setText(glyph);
+    });
+  }
 
   public toggleInlineInk(): boolean {
     this.inlineInkEnabled = !this.inlineInkEnabled;
@@ -1285,6 +1316,9 @@ export class MindmapView extends TextFileView {
   async onLoadFile(file: TFile): Promise<void> {
     void super.onLoadFile(file);
     this.ensureViewListeners();
+    // YAML belongs to the Markdown note and survives BRAT reinstalls and
+    // device sync; it is not stored in the plugin-specific data.json.
+    this.edgeArrowModes = readEdgeArrowModes(this.app, file);
 
     if (this.frontmatterStorage && file) {
       const mindmapData = await this.frontmatterStorage.loadMindmapData(file);

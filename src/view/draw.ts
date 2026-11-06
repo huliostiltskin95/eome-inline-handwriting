@@ -7,6 +7,7 @@ import { MindmapView } from './mindmap-view';
 import { sortByMarkdownOrder } from '../utils/cytoscape';
 import { arrangeTopLevelTrees } from './tree-layout';
 import { measureNodesForLayout } from './node-measurement';
+import { arrowModeForNode, arrowShapesForMode } from './edge-arrows';
 
 cytoscape.use(dagre);
 
@@ -44,7 +45,7 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
 
   view.sizeMap = nextSizeMap;
 
-  const elements = buildElements(flat, nextSizeMap);
+  const elements = buildElements(view, flat, nextSizeMap);
   const layoutOptions = createLayoutOptions(view);
   let cy = view.cy;
 
@@ -62,8 +63,8 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
           selector: 'node',
           style: {
             'shape': 'rectangle',
-            'background-opacity': 0.01,
-            'background-color': '#ffffff',
+            // Geometry and gesture targets only: handwriting stays in the overlay.
+            'background-opacity': 0,
             width: 'data(width)',
             height: 'data(height)',
           },
@@ -71,8 +72,30 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
         {
           selector: 'edge',
           style: {
-            width: 1,
-            'line-color': '#000000',
+            width: 1.35,
+            'line-color': '#666666',
+            'curve-style': 'taxi',
+            'taxi-direction': 'vertical',
+            'taxi-turn': '50%',
+            'taxi-turn-min-distance': '8px',
+            'line-cap': 'round',
+            'source-arrow-shape': 'data(sourceArrow)',
+            'target-arrow-shape': 'data(targetArrow)',
+            'source-arrow-color': '#666666',
+            'target-arrow-color': '#666666',
+            'arrow-scale': 0.65,
+          },
+        },
+        {
+          selector: 'edge.eome-layout-only',
+          style: {
+            'display': 'none',
+          },
+        },
+        {
+          selector: 'edge.eome-sibling',
+          style: {
+            // With the default TB layout siblings sit on the same row.
             'curve-style': 'straight',
           },
         },
@@ -94,6 +117,9 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
   }
 
   if (!request.isCurrent() || view.cy !== cy || cy.destroyed()) return;
+  // The direction of the first leg should follow the chosen Dagre flow.
+  cy.edges().style('taxi-direction',
+    view.layoutOptions.rankDir === 'LR' || view.layoutOptions.rankDir === 'RL' ? 'horizontal' : 'vertical');
 
   cy.userPanningEnabled(false);
   cy.userZoomingEnabled(false);
@@ -101,9 +127,15 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
   cy.scratch('_mindmapRenderGeneration', request.generation);
 
   await runLayout(cy, layoutOptions);
+  if (!request.isCurrent() || view.cy !== cy || cy.destroyed()) return;
+  // Render-only sibling strokes are added after Dagre finishes. Including them
+  // in the layout graph would introduce cycles and reorder the user's notes.
+  const siblings = buildSiblingEdges(view, roots);
+  if (siblings.length) cy.add(siblings);
 }
 
 function buildElements(
+  view: MindmapView,
   flat: OutlineNode[],
   sizeMap: Map<number, { w: number; h: number }>
 ): ElementDefinition[] {
@@ -125,19 +157,47 @@ function buildElements(
     });
   }
   for (const parent of flat) {
-    parent.children.forEach((child) => {
+    parent.children.forEach((child, index) => {
+      const arrows = arrowShapesForMode(arrowModeForNode(view, child));
       elements.push({
+        classes: index === 0 ? 'eome-branch' : 'eome-layout-only',
         data: {
           id: `e${parent.line}-${child.line}`,
           source: `n${parent.line}`,
           target: `n${child.line}`,
           order: orderByLine.get(child.line) ?? child.line,
+          ...arrows,
         },
       });
     });
   }
 
   return elements;
+}
+
+/** Horizontal (TB) sibling relations drawn as dash-like strokes, not boxes. */
+function buildSiblingEdges(view: MindmapView, roots: OutlineNode[]): ElementDefinition[] {
+  const edges: ElementDefinition[] = [];
+  const visit = (node: OutlineNode): void => {
+    node.children.forEach((child, index) => {
+      if (index > 0) {
+        const previous = node.children[index - 1];
+        const arrows = arrowShapesForMode(arrowModeForNode(view, child));
+        edges.push({
+          classes: 'eome-sibling',
+          data: {
+            id: `s${previous.line}-${child.line}`,
+            source: `n${previous.line}`,
+            target: `n${child.line}`,
+            ...arrows,
+          },
+        });
+      }
+      visit(child);
+    });
+  };
+  roots.forEach(visit);
+  return edges;
 }
 
 function createLayoutOptions(view: MindmapView): LayoutOptions {

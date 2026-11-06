@@ -1,7 +1,7 @@
 import { Notice, TFile } from 'obsidian';
 import type { OutlineNode } from '../utils/outline';
 import type { MindmapView } from '../view/mindmap-view';
-import { createDrawingSvg, parseDrawingSvg } from './drawing-svg';
+import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from './drawing-svg';
 import { extractDrawingLink } from './drawing-link';
 import { warmWhiteboardRuntime } from './whiteboard-runtime';
 import {
@@ -174,7 +174,7 @@ async function editDrawingAttachment(
       new Notice('The drawing changed while its editor was open. Your edit was not saved to avoid overwriting another change.');
       return;
     }
-    await view.app.vault.modify(attachment, createDrawingSvg(result.items, drawing.createdAt));
+    await view.app.vault.modify(attachment, createDrawingSvg(result.items, drawing.createdAt, undefined, hasLegacyOpaqueBacking(originalSvg)));
     view.attachmentVersions.markCurrent(attachment);
     await view.refreshRenderedAttachments(attachment);
     if (result.next) {
