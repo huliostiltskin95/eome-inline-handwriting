@@ -408,7 +408,7 @@ export async function renderMindmapEomeEmbed(
 
   el.empty();
   const wrapper = el.createDiv({ cls: inline
-    ? 'mindmap-eome-wrapper mindmap-eome-inline'
+    ? 'mindmap-eome-wrapper mindmap-eome-inline' + (mode === 'editor' ? ' eome-scoped-editing' : '')
     : 'mindmap-eome-wrapper' });
   // Registered before anything renders. Markdown rendered into this embed
   // must be owned by something that dies with the embed; the plugin instance
