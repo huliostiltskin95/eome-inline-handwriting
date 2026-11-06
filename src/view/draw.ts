@@ -92,7 +92,10 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
         {
           selector: 'edge.eome-layout-only',
           style: {
-            'display': 'none',
+            // Keep the edge in Dagre's hierarchy while hiding its pixels.
+            'opacity': 0,
+            'source-arrow-shape': 'none',
+            'target-arrow-shape': 'none',
           },
         },
         {
@@ -133,8 +136,10 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
   if (!request.isCurrent() || view.cy !== cy || cy.destroyed()) return;
   // Render-only sibling strokes are added after Dagre finishes. Including them
   // in the layout graph would introduce cycles and reorder the user's notes.
-  const siblings = buildSiblingEdges(view, roots);
-  if (siblings.length) cy.add(siblings);
+  if (!view.explicitRelationMode) {
+    const siblings = buildSiblingEdges(view, roots);
+    if (siblings.length) cy.add(siblings);
+  }
 }
 
 function buildElements(
@@ -165,7 +170,8 @@ function buildElements(
         rel.target === relationNodeKey(view.app, view.file!, child));
       const arrows = arrowShapesForMode(arrowModeForNode(view, child));
       elements.push({
-        classes: index === 0 && !isExplicitTarget ? 'eome-branch' : 'eome-layout-only',
+        classes: !view.explicitRelationMode && index === 0 && !isExplicitTarget
+          ? 'eome-branch' : 'eome-layout-only',
         data: {
           id: `e${parent.line}-${child.line}`,
           source: `n${parent.line}`,

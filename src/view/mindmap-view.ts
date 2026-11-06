@@ -90,7 +90,7 @@ import {
 import { AnimationFrameHost, RenderLifecycle } from './render-lifecycle';
 import {
   type EomeRelation, type RelationKind, type RelationArrowMode,
-  relationNodeKey, readRelations, createOrUpdateRelation,
+  relationNodeKey, readRelations, hasExplicitRelationSchema, createOrUpdateRelation,
   setRelationArrow, persistRelations
 } from './relations';
 import { renderRelationsOverlay } from './relations-overlay';
@@ -112,6 +112,8 @@ export class MindmapView extends TextFileView {
   /** Connection mode is explicitly selected; ordinary Pencil strokes remain ink. */
   public connectionMode = false;
   public relations: EomeRelation[] = [];
+  /** Legacy if no YAML schema exists; an empty [] explicitly means no edges. */
+  public explicitRelationMode = false;
   private relationWriteQueue: Promise<void> = Promise.resolve();
 
   public toggleConnectionMode(): boolean {
@@ -126,7 +128,9 @@ export class MindmapView extends TextFileView {
     const file = this.file;
     if (!file) return;
     const previous = this.relations;
+    const wasExplicit = this.explicitRelationMode;
     this.relations = next;
+    this.explicitRelationMode = true;
     // Rendering the new graph hides only the legacy edges whose destination
     // already has an explicit relation; all other 0.2.8 edges stay visible.
     void this.draw();
@@ -138,11 +142,21 @@ export class MindmapView extends TextFileView {
     } catch (error) {
       if (this.file === file && this.relations === next) {
         this.relations = previous;
+        this.explicitRelationMode = wasExplicit;
         void this.draw();
       }
       console.error('EOME relation save failed:', error);
       new Notice('Impossibile salvare il collegamento.');
     }
+  }
+
+  /** Convert only the visual routing mode; never infer old semantic labels. */
+  public async activateExplicitRelations(): Promise<void> {
+    if (this.explicitRelationMode) return;
+    if (this.getFlatNodes().length > 2) {
+      new Notice('Modalità relazioni esplicite: i vecchi archi non vengono convertiti. I nodi e gli SVG rimangono intatti.');
+    }
+    await this.saveRelationChanges(this.relations);
   }
 
   public async addRelation(source: OutlineNode, target: OutlineNode, kind: RelationKind): Promise<void> {
@@ -157,6 +171,9 @@ export class MindmapView extends TextFileView {
     if (duplicate) {
       new Notice('I nodi testuali identici non sono distinguibili: rinominali oppure usa SVG diversi.');
       return;
+    }
+    if (!this.explicitRelationMode && nodes.length > 2) {
+      new Notice('La mappa passa ai collegamenti espliciti. Le vecchie linee restano nei dati, ma non verranno interpretate.');
     }
     await this.saveRelationChanges(createOrUpdateRelation(this.relations, a, b, kind));
   }
@@ -1397,6 +1414,7 @@ export class MindmapView extends TextFileView {
     // device sync; it is not stored in the plugin-specific data.json.
     this.edgeArrowModes = readEdgeArrowModes(this.app, file);
     this.relations = readRelations(this.app, file);
+    this.explicitRelationMode = hasExplicitRelationSchema(this.app, file);
     this.connectionMode = false;
 
     if (this.frontmatterStorage && file) {

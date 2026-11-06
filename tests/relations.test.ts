@@ -56,6 +56,18 @@ describe('explicit semantic relation model', () => {
   });
 });
 
+describe('routing mode compatibility', () => {
+  it('distinguishes legacy notes from notes with an explicit empty schema', async () => {
+    const { hasExplicitRelationSchema } = await import('../src/view/relations');
+    const file = { path: 'sample.md' } as never;
+    const makeApp = (frontmatter: Record<string, unknown>) => ({
+      metadataCache: { getFileCache: () => ({ frontmatter }) }
+    }) as never;
+    expect(hasExplicitRelationSchema(makeApp({}), file)).toBe(false);
+    expect(hasExplicitRelationSchema(makeApp({ 'eome-relations-v1': [] }), file)).toBe(true);
+  });
+});
+
 describe('orthogonal routing for pair relationships', () => {
   const nodes = [
     { id: 'svg:NOTA.svg', x: 30, y: 100, w: 60, h: 24 },

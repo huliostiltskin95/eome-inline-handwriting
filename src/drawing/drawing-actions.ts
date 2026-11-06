@@ -374,6 +374,9 @@ export async function addBlankDrawingAsRoot(view: MindmapView): Promise<void> {
     await view.reloadDataIncremental();
     const node = view.getFlatNodes().find((candidate) => candidate.text === embed);
     if (node) view.selectNode(node.line);
+    // From the first node onward, new handwritten maps contain only explicit
+    // semantic edges. Creating a sibling alone never fabricates a connection.
+    await view.activateExplicitRelations();
   } catch (error) {
     console.error('Could not create handwritten root:', error);
     new Notice('Could not create handwritten root.');

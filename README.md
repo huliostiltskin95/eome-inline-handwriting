@@ -19,7 +19,7 @@ Il sistema di relazioni e routing della versione 0.2.8 è **provvisorio**. Le nu
 
 La [specifica funzionale completa](docs/specs/relazioni-e-collegamenti.md) è il documento di riferimento per il prossimo aggiornamento. **Non descrive funzionalità già presenti nella release BRAT 0.2.8.**
 
-## Novità 0.3.0 — Relazioni definite dall'utente
+## Novità 0.3.1 — Relazioni definite dall'utente
 
 L'aggiornamento implementa la [specifica di collegamenti](docs/specs/relazioni-e-collegamenti.md) senza conversione automatica dei vecchi SVG.
 
@@ -30,9 +30,9 @@ L'aggiornamento implementa la [specifica di collegamenti](docs/specs/relazioni-e
 - **Personalizza un collegamento:** tocca la linea per modificarne il tipo, applicare frecce all'origine/destinazione/entrambe, oppure seleziona **«Freccia esattamente qui»** per collocarla nella posizione toccata lungo il tracciato. Puoi anche eliminare soltanto la relazione.
 - **Persistenza:** le nuove relazioni sono conservate nella frontmatter YAML della nota, alla chiave `eome-relations-v1`. Non dipendono dai numeri di riga dell'outline.
 - **Layout:** nuove mappe con preferenza sinistra→destra; i layout già configurati nel frontmatter restano validi.
-- **Compatibilità:** gli archi 0.2.8 restano visibili finché non attribuisci una relazione esplicita al nodo di destinazione. Non vengono reinterpretati automaticamente come cause o conseguenze.
+- **Compatibilità:** le note esistenti **senza** `eome-relations-v1` conservano la grafica 0.2.8. Il primo collegamento esplicito attiva il nuovo routing per quella nota: i vecchi archi **non vengono convertiti semanticamente** e smettono di comparire, pur conservando integralmente i nodi Markdown/SVG. Le nuove mappe hanno il campo anche quando è vuoto, per non inventare collegamenti. Conviene provare la transizione su una copia del file.
 
-**Nota per i test iPad:** le frecce personalizzate e il gesto Collega non sono ancora stati verificati con Apple Pencil reale; consigliato un vault di prova. Le relazioni testuali con contenuto identico non possono essere distinte con certezza; per tali nodi usare due SVG separati o testi unici. La rinomina di un collegamento SVG potrebbe richiedere di ripristinare la relazione; è prevista una successiva migrazione di identificatori.
+**Release 0.3.1:** il layout legacy resta leggibile nelle note senza lo schema esplicito; passando alla nuova modalità le vecchie linee non vengono interpretate né convertite. Il comando per creare una mappa manoscritta da zero imposta subito la modalità esplicita.\n\n**Nota per i test iPad:** le frecce personalizzate e il gesto Collega non sono ancora stati verificati con Apple Pencil reale; consigliato un vault di prova. Le relazioni testuali con contenuto identico non possono essere distinte con certezza; per tali nodi usare due SVG separati o testi unici. La rinomina di un collegamento SVG potrebbe richiedere di ripristinare la relazione; è prevista una successiva migrazione di identificatori.
 
 ## Modalità pen-first (0.2.4)
 
@@ -74,7 +74,7 @@ npm test
 npm run build
 ```
 
-Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.0` con i file richiesti da BRAT.
+Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.1` con i file richiesti da BRAT.
 
 ## Provenienza e licenza
 

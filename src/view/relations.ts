@@ -62,6 +62,13 @@ export function normalizeRelations(value: unknown): EomeRelation[] {
   return result;
 }
 
+/** Presence of an empty relation array marks a new-style map with intentionally
+ * no lines. Legacy maps have no field, keeping their 0.2.8 presentation. */
+export function hasExplicitRelationSchema(app: App, file: TFile): boolean {
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  return !!frontmatter && Object.prototype.hasOwnProperty.call(frontmatter, RELATIONS_FIELD);
+}
+
 export function readRelations(app: App, file: TFile): EomeRelation[] {
   return normalizeRelations(app.metadataCache.getFileCache(file)?.frontmatter?.[RELATIONS_FIELD]);
 }
