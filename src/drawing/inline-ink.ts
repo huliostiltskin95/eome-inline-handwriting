@@ -33,6 +33,11 @@ function getViewBox(svg: string): [number, number, number, number] | null {
     ? numbers as [number, number, number, number] : null;
 }
 
+function canvasBounds(svg: string) {
+  const box = getViewBox(svg);
+  return box ? { x: box[0], y: box[1], width: box[2], height: box[3] } : undefined;
+}
+
 /** Inline pen capture is deliberately limited to native EOME SVG drawing nodes.
  * Finger contacts retain the existing navigation/selection gestures.
  */
@@ -41,7 +46,6 @@ export class InlineInkController {
   private readonly queues = new Map<string, Promise<void>>();
   private readonly pendingPreviews = new Set<SVGSVGElement>();
   private refreshTimer: number | null = null;
-  private readonly compactTimers = new Map<string, number>();
   private readonly redoItems = new Map<string, ExportedDrawingItem>();
   private eraserEnabled = false;
   public setEraserEnabled(enabled: boolean): void { this.eraserEnabled = enabled; }
@@ -71,6 +75,9 @@ export class InlineInkController {
         event.clientX < rect.left || event.clientX > rect.right ||
         event.clientY < rect.top || event.clientY > rect.bottom) return false;
 
+    this.wrapper.querySelectorAll('.mindmap-overlay.selected').forEach(el => el.classList.remove('selected'));
+    overlay.classList.add('selected');
+
     if (this.eraserEnabled) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -78,25 +85,16 @@ export class InlineInkController {
       return true;
     }
 
-    // Avoid changing the SVG viewBox during a burst of handwritten strokes.
-    const compactTimer = this.compactTimers.get(file.path);
-    if (compactTimer !== undefined) {
-      window.clearTimeout(compactTimer);
-      this.compactTimers.delete(file.path);
-    }
-
     const doc = this.wrapper.ownerDocument;
     const preview = doc.createElementNS(NS, 'svg');
     preview.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
     preview.setAttribute('aria-hidden', 'true');
-    preview.style.position = 'fixed';
-    preview.style.left = `${rect.left}px`;
-    preview.style.top = `${rect.top}px`;
-    preview.style.width = `${rect.width}px`;
-    preview.style.height = `${rect.height}px`;
-    preview.style.pointerEvents = 'none';
-    preview.style.overflow = 'hidden';
-    preview.style.zIndex = '1000';
+    preview.classList.add('eome-inline-stroke-preview');
+    const box = overlay.getBoundingClientRect();
+    preview.style.left = `${100 * (rect.left - box.left) / box.width}%`;
+    preview.style.top = `${100 * (rect.top - box.top) / box.height}%`;
+    preview.style.width = `${100 * rect.width / box.width}%`;
+    preview.style.height = `${100 * rect.height / box.height}%`;
     const line = doc.createElementNS(NS, 'path');
     line.setAttribute('stroke', '#242424');
     line.setAttribute('stroke-width', '2');
@@ -104,7 +102,7 @@ export class InlineInkController {
     line.setAttribute('stroke-linecap', 'round');
     line.setAttribute('stroke-linejoin', 'round');
     preview.appendChild(line);
-    doc.body.appendChild(preview);
+    overlay.appendChild(preview);
     this.session = { pointerId: event.pointerId, attachment: file, rect, preview, line, points: [] };
     this.addSample(event);
     try { this.wrapper.setPointerCapture(event.pointerId); } catch { /* optional in iPad WebKit */ }
@@ -156,7 +154,7 @@ export class InlineInkController {
     if (!last.id?.startsWith('inline-')) return false;
     this.redoItems.set(attachment.path, last);
     await this.view.app.vault.modify(attachment, createDrawingSvg(
-      drawing.items.slice(0, -1), drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
+      drawing.items.slice(0, -1), drawing.createdAt, canvasBounds(before), hasLegacyOpaqueBacking(before)));
     this.view.attachmentVersions.markCurrent(attachment);
     await this.view.refreshRenderedAttachments(attachment);
     return true;
@@ -172,7 +170,7 @@ export class InlineInkController {
     const drawing = parseDrawingSvg(before);
     if (!drawing || drawing.items.some(existing => existing.id === item.id)) return false;
     await this.view.app.vault.modify(attachment, createDrawingSvg(
-      [...drawing.items, item], drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
+      [...drawing.items, item], drawing.createdAt, canvasBounds(before), hasLegacyOpaqueBacking(before)));
     this.redoItems.delete(attachment.path);
     this.view.attachmentVersions.markCurrent(attachment);
     await this.view.refreshRenderedAttachments(attachment);
@@ -244,7 +242,7 @@ export class InlineInkController {
       if (await this.view.app.vault.read(attachment) !== before)
         throw new Error('Concurrent SVG edit; erasure cancelled.');
       await this.view.app.vault.modify(attachment,
-        createDrawingSvg(items, drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
+        createDrawingSvg(items, drawing.createdAt, canvasBounds(before), hasLegacyOpaqueBacking(before)));
       this.redoItems.delete(key);
       this.view.attachmentVersions.markCurrent(attachment);
     });
@@ -252,7 +250,7 @@ export class InlineInkController {
     try {
       await current;
       this.scheduleRefresh();
-      this.scheduleCompaction(attachment);
+
     } catch (error) {
       console.error('Inline vector eraser failed:', error);
       new Notice('Non è stato possibile cancellare il tratto.');
@@ -269,7 +267,7 @@ export class InlineInkController {
     try {
       await current;
       this.scheduleRefresh();
-      this.scheduleCompaction(session.attachment);
+
     } catch (error) {
       console.error('Inline handwriting save failed:', error);
       session.preview.remove();
@@ -300,47 +298,6 @@ export class InlineInkController {
         }
       );
     }, 400);
-  }
-
-  /**
-   * Auto-fit the SVG to its real vector bounds only after the pen has rested.
-   * Keeping the viewBox fixed during the stroke prevents the live writing
-   * surface from shifting under Apple Pencil with every new letter.
-   */
-  private scheduleCompaction(attachment: TFile): void {
-    const previous = this.compactTimers.get(attachment.path);
-    if (previous !== undefined) window.clearTimeout(previous);
-    const timeout = window.setTimeout(() => {
-      this.compactTimers.delete(attachment.path);
-      if (this.session?.attachment.path === attachment.path ||
-          this.queues.has(attachment.path)) {
-        this.scheduleCompaction(attachment);
-        return;
-      }
-      if (!this.wrapper.isConnected) return;
-      void this.compactDrawing(attachment).catch((error) => {
-        console.warn('Could not adapt handwriting SVG to its stroke bounds:', error);
-      });
-    }, 1800);
-    this.compactTimers.set(attachment.path, timeout);
-  }
-
-  private async compactDrawing(attachment: TFile): Promise<void> {
-    if (this.session?.attachment.path === attachment.path || this.queues.has(attachment.path)) return;
-    const before = await this.view.app.vault.read(attachment);
-    const doc = parseDrawingSvg(before);
-    if (!doc || doc.items.length === 0) return;
-    const compacted = createDrawingSvg(doc.items, doc.createdAt,
-      undefined, hasLegacyOpaqueBacking(before));
-    const oldBounds = getViewBox(before);
-    const newBounds = getViewBox(compacted);
-    if (!oldBounds || !newBounds || oldBounds.every((value, i) => value === newBounds[i])) return;
-    if (this.session?.attachment.path === attachment.path || this.queues.has(attachment.path)) return;
-    // Another editor can update the same attachment; do not silently overwrite.
-    if (await this.view.app.vault.read(attachment) !== before) return;
-    await this.view.app.vault.modify(attachment, compacted);
-    this.view.attachmentVersions.markCurrent(attachment);
-    await this.view.refreshRenderedAttachments(attachment);
   }
 
   private clearPreviews(): void {

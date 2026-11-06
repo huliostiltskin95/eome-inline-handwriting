@@ -2626,3 +2626,35 @@ body.is-mobile .eome-drawing-footer button,
 }
 .eome-scoped-tab .eome-scoped-lower-pane > .eome-create-first-node[hidden],
 .eome-scoped-tab.eome-scoped-readonly .mindmap-eome-empty button { display: none; }
+
+/* Direct writing occupies the complete leaf; advanced editing is opt-in. */
+.eome-scoped-tab.eome-direct-writing .eome-scoped-splitter,
+.eome-scoped-tab.eome-direct-writing .eome-scoped-lower-pane { display: none; }
+.eome-scoped-tab.eome-direct-writing .eome-scoped-split > .eome-scoped-editor-host {
+  flex: 1 1 auto; height: 100%; overflow: hidden;
+}
+.eome-scoped-tab .eome-tab-diagram {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 108px;
+  grid-template-rows: minmax(0, 1fr) auto; height: 100%; min-height: 0; gap: 4px;
+}
+.eome-scoped-tab .eome-tab-diagram > .mindmap-eome-wrapper {
+  grid-column: 1; grid-row: 1; height: 100%; min-height: 0; width: 100%; overflow: hidden; touch-action: none;
+}
+.eome-scoped-tab .eome-tab-diagram > .mindmap-eome-ink-tools {
+  position: static; grid-column: 2; grid-row: 1 / 3; display: flex;
+  flex-direction: column; flex-wrap: nowrap; overflow-y: auto; min-height: 0;
+  width: 108px; max-height: 100%; padding: 4px; margin: 0; box-sizing: border-box;
+}
+.eome-scoped-tab .mindmap-eome-ink-tools > * { flex-shrink: 0; width: 100%; min-width: 0; }
+.eome-scoped-tab .mindmap-eome-ink-tools button { white-space: normal; height: auto; }
+.eome-scoped-tab .eome-map-commands {
+  grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; gap: 4px; padding: 4px;
+  background: var(--background-primary); border-top: 1px solid var(--text-normal);
+}
+.eome-scoped-tab .eome-map-commands button { min-height: 44px; min-width: 44px; }
+.eome-scoped-tab.eome-scoped-readonly .eome-map-commands { display: none; }
+.eome-scoped-tab.eome-scoped-readonly .eome-tab-diagram { grid-template-columns: minmax(0, 1fr); }
+.eome-scoped-tab .eome-scoped-main-toolbar { flex-wrap: wrap; }
+.eome-scoped-tab { min-width: 0; overflow: hidden; }
+.eome-scoped-tab .eome-export-copy { grid-column: 1; min-height: 44px; }
+.eome-inline-stroke-preview { position: absolute; pointer-events: none; overflow: hidden; z-index: 1000; }

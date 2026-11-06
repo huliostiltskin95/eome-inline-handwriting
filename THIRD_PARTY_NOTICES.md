@@ -69,3 +69,17 @@ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
 LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
+
+## PDF export
+
+PDF export uses pdf-lib (MIT, Copyright (c) 2019 Andrew Dillon), with its bundled
+MIT dependencies (@pdf-lib/standard-fonts, @pdf-lib/upng and pako). License notices
+are retained by the production bundler.
+
+## Interaction references (no source copied)
+
+The pane-based editor and local gesture ownership were informed by
+zsviczian/obsidian-excalidraw-plugin (`src/utils/obsidianUtils.ts`) and
+ellimist-afk/handwriting (`src/input/PalmShield.ts` and README). EOME implements
+its own navigation and retains separate storage and tools. Handwriting is
+not bundled or required; PDF annotations remain owned by that plugin.

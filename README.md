@@ -191,3 +191,32 @@ Le anteprime sono native in Obsidian: non serve esportare PDF, PNG o SVG per ved
 ### Limiti tecnici attuali (0.3.2)
 
 La prevenzione delle sovrapposizioni usa una fusione dei segmenti collineari e una scelta locale dei gomiti per evitare i nodi intermedi. **Non è ancora un risolutore globale di incroci**. La geometria è ancorata al centro dell'immagine SVG visualizzata, che approssima il centro della grafia, ma non calcola ancora il centro esatto dell'inchiostro. La posizione delle frecce personalizzate viene scelta toccando un punto del collegamento e selezionando «Freccia esattamente qui»; il trascinamento continuo della freccia non è ancora implementato. Le prove reali su iPad restano necessarie.
+
+### 0.6.0 — scrittura diretta e pannelli affiancati
+
+- Il pulsante dell'anteprima apre la mappa in un nuovo pannello verticale di
+  Obsidian, senza sostituire la nota o un PDF aperto. Puoi ridimensionare i pannelli
+  con il divisore di Obsidian. Handwriting continua a gestire il PDF separatamente.
+- Crea un nodo, poi scrivi direttamente nel suo riquadro con la penna. Il primo
+  nodo e i nuovi nodi paralleli, a L e fratelli non richiedono la lavagna separata.
+  L'editor avanzato rimane disponibile per le forme e le modifiche specialistiche.
+- Un dito seleziona con un tocco e sposta la mappa trascinando; due dita fanno
+  zoom. Durante un tratto di penna i contatti touch non spostano la mappa.
+  Il mouse scrive solo attivando l'apposito comando; la rotella regola lo zoom.
+- La barra a destra resta fissa e scorre internamente se manca spazio. Annulla,
+  ripeti, zoom, adatta e esportazioni restano in basso a sinistra. Lo zoom viene
+  conservato dopo il salvataggio dei tratti; la superficie del nodo non si
+  restringe automaticamente dopo una pausa della penna.
+- PNG e PDF esportano la mappa intera, indipendentemente dallo zoom, in un nuovo
+  file accanto alla nota. Il PDF contiene un'immagine della mappa (non vettori
+  modificabili). Le immagini sono limitate a 4096 px per lato e 12 megapixel
+  per contenere l'uso di memoria su tablet. Nessun file precedente è sovrascritto.
+  Il collegamento da incorporare viene copiato negli appunti; se il dispositivo
+  blocca la copia automatica, compare un pulsante per copiarlo con un nuovo tocco.
+
+Verifica sui dispositivi: aprire una nota accanto a un PDF annotato con
+Handwriting, aprire EOME dall'anteprima, scrivere con Pencil/S Pen, appoggiare il
+palmo, selezionare con il dito, effettuare zoom e ridimensionare i pannelli.
+Verificare anche lazo multiplo, creazione dei tre tipi di nodo, annulla/ripeti e
+incollaggio dei collegamenti PNG/PDF. I test automatici non sostituiscono questa
+verifica hardware su iPad e BOOX.

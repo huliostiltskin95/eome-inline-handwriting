@@ -1,3 +1,5 @@
+import { bindMapNavigation } from './map-navigation';
+import { exportInlineMap } from './map-export';
 import { previewHeight } from './preview-viewport';
 import { readSummaryGroups, summaryGeometry, layoutSummaryNodes, type SummaryGroup } from './summary-groups';
 import {
@@ -436,7 +438,7 @@ export async function renderMindmapEomeEmbed(
     const start = el.createDiv({ cls: 'mindmap-eome-empty' });
     start.createEl('p', { text: 'Mappa manoscritta vuota' });
     const add = start.createEl('button', {
-      text: inlineContext ? '+ Crea il primo nodo · editor avanzato' : 'Apri mappa EOME',
+      text: inlineContext ? '+ Crea il primo nodo' : 'Apri mappa EOME',
       cls: inlineContext ? 'mod-cta eome-create-first-node' : ''
     });
     add.addEventListener('click', () => {
@@ -529,7 +531,7 @@ export async function renderMindmapEomeEmbed(
       attr: { 'aria-label': 'Apri questa mappa EOME' },
     });
     setIcon(openButton, 'expand');
-    openButton.setAttribute('title', 'Apri questa mappa in una finestra');
+    openButton.setAttribute('title', 'Apri questa mappa in un nuovo pannello');
     openButton.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
@@ -611,6 +613,24 @@ export async function renderMindmapEomeEmbed(
     cy.resize();
     cy.fit(cy.elements(), 28);
   };
+  let fitted = false;
+  const syncViewport = (): void => {
+    const zoom = cy.zoom(), pan = cy.pan();
+    wrapper.querySelectorAll<HTMLElement>('.mindmap-eome-overlay').forEach(box => {
+      const node = cy.getElementById('n' + box.dataset.nodeLine);
+      if (node.empty()) return;
+      const p = node.renderedPosition();
+      box.style.setProperty('--mindmap-left', p.x + 'px');
+      box.style.setProperty('--mindmap-top', p.y + 'px');
+      box.style.setProperty('--mindmap-zoom', String(zoom));
+    });
+    const routes = wrapper.querySelector('.eome-relations-layer');
+    routes?.setAttribute('viewBox', [-pan.x / zoom, -pan.y / zoom, wrapper.clientWidth / zoom, wrapper.clientHeight / zoom].join(' '));
+    routes?.setAttribute('width', String(wrapper.clientWidth));
+    routes?.setAttribute('height', String(wrapper.clientHeight));
+  };
+  cy.on('pan zoom', syncViewport);
+  if (inlineContext) child.register(bindMapNavigation(wrapper, cy));
   let rendering = Promise.resolve();
   let queued = false;
   let dirty = false;
@@ -637,8 +657,10 @@ export async function renderMindmapEomeEmbed(
         }
         if (resized) arrange();
       }
-      fit();
+      if (!fitted || mode === 'preview') { fit(); fitted = true; }
+      else cy.resize();
       await renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap, inline);
+      syncViewport();
       if (explicitConnections && wrapper.isConnected && !cy.destroyed()) {
         renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations, summaries,
           inlineContext ? (id, position) => showSummaryMenu(inlineContext, id, position) : undefined,
@@ -652,16 +674,23 @@ export async function renderMindmapEomeEmbed(
     arrange();
     void redraw(false).then(() => {
       if (inlineContext && !stopInk && !cy.destroyed()) {
-        stopInk = connectInlineHandwriting(inlineContext, wrapper, flat, () => redraw());
+        stopInk = connectInlineHandwriting(inlineContext, wrapper, flat, () => redraw(), {
+          zoom: factor => cy.zoom({ level: Math.max(0.05, Math.min(8, cy.zoom() * factor)), renderedPosition: { x: wrapper.clientWidth / 2, y: wrapper.clientHeight / 2 } }),
+          fit: () => { fit(); syncViewport(); },
+          export: format => exportInlineMap(plugin, file, wrapper, cy, format)
+        });
       }
     });
   });
   // Observe width only: changing preview height must not trigger a resize loop.
   let lastWidth = wrapper.clientWidth;
+  let lastHeight = wrapper.clientHeight;
   const observer = new ResizeObserver(() => {
     const width = wrapper.clientWidth;
-    if (Math.abs(width - lastWidth) < 1) return;
+    const height = wrapper.clientHeight;
+    if (Math.abs(width - lastWidth) < 1 && (mode === 'preview' || Math.abs(height - lastHeight) < 1)) return;
     lastWidth = width;
+    lastHeight = height;
     void redraw(false);
   });
   observer.observe(wrapper);

@@ -1,6 +1,6 @@
 {
   "name": "eome-inline-handwriting",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "A visual drag-n-drop mindmap editor (with markdown outline under the hood).",
   "main": "main.js",
   "scripts": {
@@ -36,6 +36,7 @@
     "dagre": "^0.8.5",
     "lit": "^3.3.3",
     "monkey-around": "^3.0.0",
+    "pdf-lib": "^1.17.1",
     "perfect-freehand": "^1.2.3"
   }
 }

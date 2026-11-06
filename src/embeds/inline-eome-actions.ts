@@ -319,6 +319,10 @@ export async function createFirstInlineDrawing(context: InlineContext): Promise<
     new Notice('La mappa contiene già un primo nodo.');
     return;
   }
+  if (context.container.closest('.eome-scoped-tab')) {
+    await addInlineDrawing(context, [], null, 'figlio', 'none', []);
+    return;
+  }
   const result = await openMapDrawing(context, []);
   if (!result) return;
   const hasInk = result.items.some(item =>
@@ -392,6 +396,10 @@ async function createInlineDrawingSeries(
 export async function createRelatedInlineDrawing(
   context: InlineContext, node: OutlineNode, kind: RelationKind, sibling = false
 ): Promise<void> {
+  if (context.container.closest('.eome-scoped-tab')) {
+    await addInlineDrawing(context, parseOutline(context.source), node.line, kind, 'none', [], sibling);
+    return;
+  }
   await createInlineDrawingSeries(context, node.line, kind, sibling);
 }
 
@@ -510,7 +518,8 @@ export function showInlineCreateMenu(context: InlineContext, nodes: OutlineNode[
  */
 export function connectInlineHandwriting(
   context: InlineContext, wrapper: HTMLElement, flat: OutlineNode[],
-  refresh: () => Promise<void>
+  refresh: () => Promise<void>,
+  controls?: { zoom: (factor: number) => void; fit: () => void; export: (format: 'png' | 'pdf') => Promise<void> }
 ): () => void {
   const host = {
     app: context.plugin.app,
@@ -532,6 +541,9 @@ export function connectInlineHandwriting(
   const toolbar = wrapper.ownerDocument.createElement('div');
   toolbar.className = 'mindmap-eome-ink-tools';
   wrapper.parentElement!.insertBefore(toolbar, wrapper);
+  const commands = wrapper.ownerDocument.createElement('div');
+  commands.className = 'eome-map-commands';
+  wrapper.parentElement!.appendChild(commands);
   const undo = toolbar.createEl('button', { text: '↶ Annulla', attr: { 'aria-label': 'Annulla ultimo tratto' } });
   const redo = toolbar.createEl('button', { text: '↷ Ripristina', attr: { 'aria-label': 'Ripristina ultimo tratto' } });
   const eraser = toolbar.createEl('button', { text: 'Gomma', attr: { 'aria-label': 'Cancellino vettoriale' } });
@@ -616,6 +628,21 @@ export function connectInlineHandwriting(
   };
   undo.addEventListener('click', () => run('undo'));
   redo.addEventListener('click', () => run('redo'));
+  commands.append(undo, redo);
+  if (controls) {
+    for (const [label, action] of [
+      ['−', () => controls.zoom(1 / 1.25)], ['+', () => controls.zoom(1.25)],
+      ['Adatta', () => controls.fit()],
+      ['PNG', () => controls.export('png')], ['PDF', () => controls.export('pdf')]
+    ] as const) {
+      const button = commands.createEl('button', { text: label, attr: { 'aria-label': label === '+' ? 'Ingrandisci mappa' : label === '−' ? 'Riduci mappa' : label } });
+      button.addEventListener('click', () => {
+        button.disabled = true;
+        void Promise.resolve().then(action).catch(error => new Notice(String(error)))
+          .then(() => { button.disabled = false; });
+      });
+    }
+  }
   // Touch taps select nodes; a stylus remains the primary in-place ink tool.
   // Mouse clicks select by default. Opt into mouse drawing explicitly to avoid
   // starting a stroke before the click or context-menu event can fire.
@@ -636,6 +663,7 @@ export function connectInlineHandwriting(
   let lassoSvg: SVGSVGElement | null = null;
   let selectedLines: number[] = [];
   const lasso = toolbar.createEl('button', { text: 'Lazo nodi', attr: { 'aria-pressed': 'false' } });
+  toolbar.prepend(detail, parallel, sibling, lasso);
   const side = toolbar.createEl('select', { attr: { 'aria-label': 'Orientamento graffa' } });
   side.createEl('option', { text: '} Sintesi a destra', value: 'right' });
   side.createEl('option', { text: '{ Sintesi a sinistra', value: 'left' });
@@ -704,6 +732,7 @@ export function connectInlineHandwriting(
     controller.cancel();
     lassoSvg?.remove();
     toolbar.remove();
+    commands.remove();
     wrapper.removeEventListener('pointerdown', down, true);
     wrapper.removeEventListener('pointermove', move, true);
     wrapper.removeEventListener('pointerup', up, true);
@@ -723,7 +752,7 @@ export async function editInlineDrawing(context: InlineContext, roots: OutlineNo
   const before = await context.plugin.app.vault.read(file);
   const drawing = parseDrawingSvg(before);
   if (!drawing) return;
-  const result = await openMapDrawing(context, drawing.items as ExportedDrawingItem[], true, tool);
+  const result = await openMapDrawing(context, drawing.items, true, tool);
   if (!result) return;
   if (await context.plugin.app.vault.read(file) !== before) {
     new Notice('Il disegno è cambiato mentre era aperto; nessuna sovrascrittura.');

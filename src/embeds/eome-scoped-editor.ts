@@ -105,7 +105,7 @@ export class EomeScopedEditor extends ItemView {
     this.firstNodeButton = toolbar.createEl('button', {
       cls: 'mod-cta eome-create-first-node',
       text: '+ Crea il primo nodo',
-      attr: { 'aria-label': 'Crea il primo nodo nell’editor avanzato' }
+      attr: { 'aria-label': 'Crea un nodo e scrivi direttamente nella mappa' }
     });
     this.firstNodeButton.addEventListener('click', () => {
       void this.createFirstNode().catch(error => {
@@ -196,6 +196,7 @@ export class EomeScopedEditor extends ItemView {
 
   private applySplitState(): void {
     this.contentEl.classList.toggle('eome-scoped-readonly', this.readOnly);
+    this.contentEl.classList.toggle('eome-direct-writing', !this.editorPanel);
     this.splitArea?.style.setProperty('--eome-preview-percent', this.splitRatio + '%');
     if (this.lowerPane) this.lowerPane.hidden = this.readOnly;
     if (this.firstNodeButton) this.firstNodeButton.disabled = this.readOnly || this.creatingFirstNode;
@@ -500,7 +501,8 @@ export class EomeScopedEditor extends ItemView {
 export async function openScopedEomeEditor(
   plugin: MindmapPlugin, file: TFile, fence: InlineEomeFence
 ): Promise<void> {
-  const leaf = plugin.app.workspace.getLeaf('tab');
+  // Split the originating leaf: never replace a PDF or its Handwriting view.
+  const leaf = plugin.app.workspace.getLeaf('split', 'vertical');
   await leaf.setViewState({
     type: VIEW_TYPE_EOME_SCOPED,
     state: {
