@@ -68,7 +68,7 @@ describe('ink-only node context menu', () => {
 
   it('opens handwriting but not plain text editing', () => {
     expect(menuTitlesFor(node('Idea'))).not.toContain('Espandi / modifica disegno');
-    expect(menuTitlesFor(node('![[Idea drawing.svg]]')).toContain('Espandi / modifica disegno');
+    expect(menuTitlesFor(node('![[Idea drawing.svg]]'))).toContain('Espandi / modifica disegno');
   });
 
   it('opens arrow choices after selecting the parallel geometry', () => {
