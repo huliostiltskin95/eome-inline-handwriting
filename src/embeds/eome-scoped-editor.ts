@@ -15,6 +15,7 @@ export class EomeScopedEditor extends Modal {
   private renderGeneration = 0;
   private closed = false;
   private modifyRef: EventRef | null = null;
+  private selectionObserver: MutationObserver | null = null;
   private source: string;
   private line: number;
   private id: string | null;
@@ -72,6 +73,11 @@ export class EomeScopedEditor extends Modal {
       this.host.setText('Il blocco EOME è stato spostato o modificato fuori dall’editor. Nessun altro blocco sarà modificato.');
       return;
     }
+    const selectedLine = this.host.querySelector<HTMLElement>(
+      '.mindmap-eome-overlay.selected[data-node-line]')?.dataset.nodeLine;
+    const restoreSelection = selectedLine !== undefined && this.source === fence.content;
+    this.selectionObserver?.disconnect();
+    this.selectionObserver = null;
     this.id = inlineMapId(fence.content);
     this.source = fence.content;
     this.line = fence.open;
@@ -93,6 +99,22 @@ export class EomeScopedEditor extends Modal {
         child.load();
       },
     } as unknown as MarkdownPostProcessorContext;
+    if (restoreSelection) {
+      const host = this.host;
+      const restore = (): void => {
+        const active = host?.querySelector('.mindmap-eome-overlay.selected');
+        const overlay = host?.querySelector<HTMLElement>(
+          '.mindmap-eome-overlay[data-node-line="' + selectedLine + '"]');
+        if (overlay && !active) overlay.classList.add('selected');
+        if (overlay || active) {
+          this.selectionObserver?.disconnect();
+          this.selectionObserver = null;
+        }
+      };
+      this.selectionObserver = new MutationObserver(restore);
+      this.selectionObserver.observe(target, { childList: true, subtree: true });
+      restore();
+    }
     await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
   }
 
@@ -100,6 +122,8 @@ export class EomeScopedEditor extends Modal {
     this.closed = true;
     this.renderGeneration++;
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    this.selectionObserver?.disconnect();
+    this.selectionObserver = null;
     if (this.modifyRef) this.plugin.app.vault.offref(this.modifyRef);
     this.modifyRef = null;
     for (const child of this.children) child.unload();
