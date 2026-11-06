@@ -413,7 +413,11 @@ export async function renderMindmapEomeEmbed(
         add.disabled = true;
         void (async () => {
           try {
-            await createFirstInlineDrawing(inlineContext);
+            const context = ctx as MarkdownPostProcessorContext & {
+              requestFirstNode?: () => Promise<void>;
+            };
+            if (context.requestFirstNode) await context.requestFirstNode();
+            else await createFirstInlineDrawing(inlineContext);
           } catch (error) {
             console.error('EOME first node advanced editor failed', error);
             new Notice('Impossibile aprire l’editor del primo nodo: ' +
