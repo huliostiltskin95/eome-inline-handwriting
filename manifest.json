@@ -1,9 +1,9 @@
 {
   "id": "eome-inline-handwriting",
   "name": "EOME Inline Handwriting",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "minAppVersion": "1.8.7",
-  "description": "Mappe manoscritte trasparenti, dimensionamento SVG automatico, collegamenti a L e frecce configurabili.",
+  "description": "Mappe manoscritte con collegamenti espliciti — / L tra coppie di nodi, gesti Apple Pencil e frecce libere.",
   "author": "Kornelius Paede",
   "authorUrl": "https://dramaturgie.lol/",
   "isDesktopOnly": false

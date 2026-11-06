@@ -88,6 +88,12 @@ import {
   cycleIncomingEdgeArrow
 } from './edge-arrows';
 import { AnimationFrameHost, RenderLifecycle } from './render-lifecycle';
+import {
+  type EomeRelation, type RelationKind, type RelationArrowMode,
+  relationNodeKey, readRelations, createOrUpdateRelation,
+  setRelationArrow, persistRelations
+} from './relations';
+import { renderRelationsOverlay } from './relations-overlay';
 
 export type { LayoutOptions, MindmapViewState };
 
@@ -103,6 +109,77 @@ export class MindmapView extends TextFileView {
   public selectedNodeLines: Set<number> = new Set();
   public pendingEditNodeLine: number | null = null;
   public inlineInkEnabled = true;
+  /** Connection mode is explicitly selected; ordinary Pencil strokes remain ink. */
+  public connectionMode = false;
+  public relations: EomeRelation[] = [];
+  private relationWriteQueue: Promise<void> = Promise.resolve();
+
+  public toggleConnectionMode(): boolean {
+    this.connectionMode = !this.connectionMode;
+    this.wrapper?.classList.toggle('is-eome-linking', this.connectionMode);
+    this.wrapper?.querySelector('.eome-connect-toggle')?.setAttribute('aria-pressed', String(this.connectionMode));
+    return this.connectionMode;
+  }
+
+  /** Mutable semantic edges, keyed by SVG identity rather than outline line. */
+  private async saveRelationChanges(next: EomeRelation[]): Promise<void> {
+    const file = this.file;
+    if (!file) return;
+    const previous = this.relations;
+    this.relations = next;
+    // Rendering the new graph hides only the legacy edges whose destination
+    // already has an explicit relation; all other 0.2.8 edges stay visible.
+    void this.draw();
+    const task = this.relationWriteQueue.catch(() => {}).then(() => persistRelations(this.app, file, next));
+    this.relationWriteQueue = task;
+    try {
+      await task;
+      if (this.file === file) await this.reloadDataIncremental();
+    } catch (error) {
+      if (this.file === file && this.relations === next) {
+        this.relations = previous;
+        void this.draw();
+      }
+      console.error('EOME relation save failed:', error);
+      new Notice('Impossibile salvare il collegamento.');
+    }
+  }
+
+  public async addRelation(source: OutlineNode, target: OutlineNode, kind: RelationKind): Promise<void> {
+    const file = this.file;
+    if (!file) return;
+    const nodes = this.getFlatNodes();
+    const a = relationNodeKey(this.app, file, source);
+    const b = relationNodeKey(this.app, file, target);
+    if (a === b) { new Notice('Scegli due nodi diversi.'); return; }
+    const duplicate = [a, b].some(key =>
+      nodes.filter(n => relationNodeKey(this.app, file, n) === key).length !== 1);
+    if (duplicate) {
+      new Notice('I nodi testuali identici non sono distinguibili: rinominali oppure usa SVG diversi.');
+      return;
+    }
+    await this.saveRelationChanges(createOrUpdateRelation(this.relations, a, b, kind));
+  }
+
+  public async changeRelationKind(id: string, kind: RelationKind): Promise<void> {
+    if (!this.relations.some(r => r.id === id)) return;
+    await this.saveRelationChanges(this.relations.map(r => r.id === id ? { ...r, kind } : r));
+  }
+
+  public async changeRelationArrow(id: string, mode: RelationArrowMode, at?: number): Promise<void> {
+    if (!this.relations.some(r => r.id === id)) return;
+    await this.saveRelationChanges(setRelationArrow(this.relations, id, mode, at));
+  }
+
+  public async removeRelation(id: string): Promise<void> {
+    if (!this.relations.some(r => r.id === id)) return;
+    await this.saveRelationChanges(this.relations.filter(r => r.id !== id));
+  }
+
+  public renderExplicitRelations(): void {
+    renderRelationsOverlay(this);
+  }
+
   public edgeArrowModes: Record<string, EdgeArrowMode> = Object.create(null);
 
   public getIncomingEdgeArrowMode(node: OutlineNode): EdgeArrowMode {
@@ -1319,6 +1396,8 @@ export class MindmapView extends TextFileView {
     // YAML belongs to the Markdown note and survives BRAT reinstalls and
     // device sync; it is not stored in the plugin-specific data.json.
     this.edgeArrowModes = readEdgeArrowModes(this.app, file);
+    this.relations = readRelations(this.app, file);
+    this.connectionMode = false;
 
     if (this.frontmatterStorage && file) {
       const mindmapData = await this.frontmatterStorage.loadMindmapData(file);

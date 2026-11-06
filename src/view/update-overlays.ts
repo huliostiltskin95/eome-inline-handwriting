@@ -84,7 +84,9 @@ export function updateOverlayGeometry(view: MindmapView): boolean {
     });
   }
 
-  return updateHeadingFrameGeometry(view.wrapper, view.cy);
+  const updated = updateHeadingFrameGeometry(view.wrapper, view.cy);
+  view.renderExplicitRelations?.();
+  return updated;
 }
 
 function performOverlayUpdate(view: MindmapView): void {
@@ -392,6 +394,10 @@ function performOverlayUpdate(view: MindmapView): void {
       }
     });
   });
+
+  // Rebuild explicit pair paths only after node geometry has been committed
+  // for this frame. SVG links and node overlays remain independent layers.
+  view.renderExplicitRelations?.();
 
   if (pendingEdit.current) {
     const edit = pendingEdit.current;

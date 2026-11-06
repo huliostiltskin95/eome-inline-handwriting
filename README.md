@@ -19,6 +19,21 @@ Il sistema di relazioni e routing della versione 0.2.8 è **provvisorio**. Le nu
 
 La [specifica funzionale completa](docs/specs/relazioni-e-collegamenti.md) è il documento di riferimento per il prossimo aggiornamento. **Non descrive funzionalità già presenti nella release BRAT 0.2.8.**
 
+## Novità 0.3.0 — Relazioni definite dall'utente
+
+L'aggiornamento implementa la [specifica di collegamenti](docs/specs/relazioni-e-collegamenti.md) senza conversione automatica dei vecchi SVG.
+
+- **Figlio / conseguenza:** crea un nodo manoscritto collegato con un tratto orizzontale. Se un concetto ne ha più di uno, una dorsale verticale comune raccoglie le uscite, evitando di duplicare i segmenti.
+- **Dettaglio / causa:** crea un nodo collegato con un gomito a L, orientato automaticamente in base agli ostacoli.
+- **Nuovo fratello:** inserisce un nodo allo stesso livello Markdown, **senza attribuirgli una relazione semantica**.
+- **Collega (icona catena):** attiva lo strumento Apple Pencil, trascina dal primo nodo al secondo, quindi scegli il rapporto. La modalità Penna continua a produrre tratti SVG quando Collega è disattivato.
+- **Personalizza un collegamento:** tocca la linea per modificarne il tipo, applicare frecce all'origine/destinazione/entrambe, oppure seleziona **«Freccia esattamente qui»** per collocarla nella posizione toccata lungo il tracciato. Puoi anche eliminare soltanto la relazione.
+- **Persistenza:** le nuove relazioni sono conservate nella frontmatter YAML della nota, alla chiave `eome-relations-v1`. Non dipendono dai numeri di riga dell'outline.
+- **Layout:** nuove mappe con preferenza sinistra→destra; i layout già configurati nel frontmatter restano validi.
+- **Compatibilità:** gli archi 0.2.8 restano visibili finché non attribuisci una relazione esplicita al nodo di destinazione. Non vengono reinterpretati automaticamente come cause o conseguenze.
+
+**Nota per i test iPad:** le frecce personalizzate e il gesto Collega non sono ancora stati verificati con Apple Pencil reale; consigliato un vault di prova. Le relazioni testuali con contenuto identico non possono essere distinte con certezza; per tali nodi usare due SVG separati o testi unici. La rinomina di un collegamento SVG potrebbe richiedere di ripristinare la relazione; è prevista una successiva migrazione di identificatori.
+
 ## Modalità pen-first (0.2.4)
 
 Il plugin funziona dentro Obsidian: apri una nota Markdown e scegli **Mindmap view of this file** dal menu della nota. La modalità Penna è **attiva per impostazione predefinita**.
@@ -59,7 +74,7 @@ npm test
 npm run build
 ```
 
-Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.2.8` con i file richiesti da BRAT.
+Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.0` con i file richiesti da BRAT.
 
 ## Provenienza e licenza
 

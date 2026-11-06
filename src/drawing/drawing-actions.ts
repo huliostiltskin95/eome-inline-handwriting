@@ -1,6 +1,7 @@
 import { Notice, TFile } from 'obsidian';
 import type { OutlineNode } from '../utils/outline';
 import type { MindmapView } from '../view/mindmap-view';
+import type { RelationKind } from '../view/relations';
 import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from './drawing-svg';
 import { extractDrawingLink } from './drawing-link';
 import { warmWhiteboardRuntime } from './whiteboard-runtime';
@@ -183,7 +184,9 @@ async function editDrawingAttachment(
         new Notice('Drawing saved. Could not locate its node to create a related node.');
         return;
       }
-      const added = await createBlankRelativeDrawing(view, matches[0], result.next);
+      const added = await createBlankRelativeDrawing(
+        view, matches[0], result.next, result.next === 'child' ? 'figlio' : undefined
+      );
       if (!added) return;
       // Open the next handwriting sheet directly. No intermediate trip back to
       // the map, keyboard, or context menu is required.
@@ -306,7 +309,8 @@ type BlankDrawing = { attachment: TFile; embed: string };
 async function createBlankRelativeDrawing(
   view: MindmapView,
   node: OutlineNode,
-  placement: 'child' | 'sibling'
+  placement: 'child' | 'sibling',
+  kind?: RelationKind
 ): Promise<BlankDrawing | null> {
   const sourcePath = view.file?.path;
   if (!sourcePath) return null;
@@ -330,7 +334,10 @@ async function createBlankRelativeDrawing(
       return null;
     }
     const newNode = view.getFlatNodes().find((candidate) => candidate.text === embed);
-    if (newNode) view.selectNode(newNode.line);
+    if (newNode) {
+      view.selectNode(newNode.line);
+      if (kind) await view.addRelation(liveTarget, newNode, kind);
+    }
     return { attachment, embed };
   } catch (error) {
     console.error('Could not create an empty drawing node:', error);
@@ -374,7 +381,17 @@ export async function addBlankDrawingAsRoot(view: MindmapView): Promise<void> {
 }
 
 export async function addBlankDrawingAsChild(view: MindmapView, node: OutlineNode): Promise<void> {
-  await createBlankRelativeDrawing(view, node, 'child');
+  await createBlankRelativeDrawing(view, node, 'child', 'figlio');
+}
+
+/** A named semantic relationship is chosen per node pair, never inferred from
+ * the outline indentation. All four kinds create a handwritten child so that
+ * the Markdown note retains a useful outline and Dagre can lay out the map.
+ */
+export async function addBlankDrawingWithRelation(
+  view: MindmapView, node: OutlineNode, kind: RelationKind
+): Promise<void> {
+  await createBlankRelativeDrawing(view, node, 'child', kind);
 }
 
 export async function addBlankDrawingAsSibling(view: MindmapView, node: OutlineNode): Promise<void> {

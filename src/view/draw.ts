@@ -8,6 +8,7 @@ import { sortByMarkdownOrder } from '../utils/cytoscape';
 import { arrangeTopLevelTrees } from './tree-layout';
 import { measureNodesForLayout } from './node-measurement';
 import { arrowModeForNode, arrowShapesForMode } from './edge-arrows';
+import { relationNodeKey } from './relations';
 
 cytoscape.use(dagre);
 
@@ -160,9 +161,11 @@ function buildElements(
   }
   for (const parent of flat) {
     parent.children.forEach((child, index) => {
+      const isExplicitTarget = !!view.file && view.relations.some(rel =>
+        rel.target === relationNodeKey(view.app, view.file!, child));
       const arrows = arrowShapesForMode(arrowModeForNode(view, child));
       elements.push({
-        classes: index === 0 ? 'eome-branch' : 'eome-layout-only',
+        classes: index === 0 && !isExplicitTarget ? 'eome-branch' : 'eome-layout-only',
         data: {
           id: `e${parent.line}-${child.line}`,
           source: `n${parent.line}`,
@@ -183,6 +186,11 @@ function buildSiblingEdges(view: MindmapView, roots: OutlineNode[]): ElementDefi
   const visit = (node: OutlineNode): void => {
     node.children.forEach((child, index) => {
       if (index > 0) {
+        if (view.file && view.relations.some(rel =>
+          rel.target === relationNodeKey(view.app, view.file!, child))) {
+          visit(child);
+          return;
+        }
         const previous = node.children[index - 1];
         const arrows = arrowShapesForMode(arrowModeForNode(view, child));
         edges.push({

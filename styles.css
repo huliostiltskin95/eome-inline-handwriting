@@ -2117,3 +2117,33 @@ body.is-mobile .eome-drawing-footer button,
 .mindmap-wrapper button.eome-edge-arrow:focus-visible {
   outline: 2px solid var(--interactive-accent);
 }
+
+
+/* EOME semantic links (v0.3): distinct from the Cytoscape layout graph.
+   The layer never covers the handwritten SVGs; only wide invisible strokes
+   accept click/Pencil activation to edit a specific relationship. */
+.mindmap-wrapper > svg.eome-relations-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.mindmap-wrapper svg.eome-relations-layer .eome-relation-line,
+.mindmap-wrapper svg.eome-relations-layer .eome-link-arrowhead {
+  pointer-events: none;
+}
+.mindmap-wrapper svg.eome-relations-layer .eome-relation-hit {
+  pointer-events: stroke;
+  cursor: pointer;
+}
+.mindmap-wrapper.is-eome-linking .mindmap-overlay {
+  cursor: crosshair;
+}
+.vertical-toolbar .eome-connect-toggle[aria-pressed="true"] {
+  outline: 2px solid var(--interactive-accent);
+  color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}

@@ -5,6 +5,7 @@ import { editNodeContent } from '../drawing/drawing-actions';
 import { extractDrawingLink } from '../drawing/drawing-link';
 import type { MindmapView } from './mindmap-view';
 import { InlineInkController } from '../drawing/inline-ink';
+import { RelationGestureController } from './relation-gesture';
 import { clearDropPreview, DropIntent, updateDropPreview } from './overlay-dnd';
 import {
   CompletedDirectTapTracker,
@@ -66,6 +67,7 @@ const INTERACTIVE_SELECTOR = [
   '.zoom-options-menu',
   '.node-editor',
   '.cm-editor',
+  '.eome-relation-hit',
   'button',
   'a',
   'input',
@@ -110,6 +112,7 @@ export class MindmapGestureCoordinator {
   private readonly contacts = new Map<number, DirectContact>();
   private readonly completedTaps = new CompletedDirectTapTracker<string>();
   private readonly inlineInk: InlineInkController;
+  private readonly relationGesture: RelationGestureController;
   private readonly ownerWindow: Window;
   private mode: MindmapGestureMode = 'idle';
   private primaryPointerId: number | null = null;
@@ -127,6 +130,7 @@ export class MindmapGestureCoordinator {
   ) {
     this.ownerWindow = wrapper.ownerDocument.defaultView ?? window;
     this.inlineInk = new InlineInkController(view, wrapper);
+    this.relationGesture = new RelationGestureController(view, wrapper);
     const signal = this.abortController.signal;
 
     wrapper.addEventListener('pointerdown', this.handlePointerDown, {
@@ -178,6 +182,7 @@ export class MindmapGestureCoordinator {
   }
 
   reset(): void {
+    this.relationGesture.cancel();
     this.inlineInk.cancel();
     this.clearHoldTimer();
     this.cancelDrag();
@@ -206,6 +211,7 @@ export class MindmapGestureCoordinator {
   }
 
   private handlePointerDown = (event: PointerEvent): void => {
+    if (this.relationGesture.pointerDown(event)) return;
     if (this.inlineInk.pointerDown(event)) return;
     const kind = directPointerKind(event.pointerType);
     if (!kind || event.button !== 0) return;
@@ -296,6 +302,7 @@ export class MindmapGestureCoordinator {
   };
 
   private handlePointerMove = (event: PointerEvent): void => {
+    if (this.relationGesture.pointerMove(event)) return;
     if (this.inlineInk.pointerMove(event)) return;
     const contact = this.contacts.get(event.pointerId);
     if (!contact) return;
@@ -363,6 +370,7 @@ export class MindmapGestureCoordinator {
   };
 
   private handlePointerEnd = (event: PointerEvent): void => {
+    if (this.relationGesture.pointerEnd(event)) return;
     if (this.inlineInk.pointerEnd(event)) return;
     const contact = this.contacts.get(event.pointerId);
     if (!contact) return;

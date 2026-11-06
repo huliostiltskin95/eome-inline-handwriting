@@ -17,7 +17,7 @@ export interface LayoutOptions {
 
 export function createDefaultLayoutOptions() {
   return {
-    rankDir: 'TB' as 'TB' | 'BT' | 'LR' | 'RL',
+    rankDir: 'LR' as 'TB' | 'BT' | 'LR' | 'RL',
     align: undefined as 'UL' | 'UR' | 'DL' | 'DR' | undefined,
     nodeSep: 50,
     edgeSep: 10,

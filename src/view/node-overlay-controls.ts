@@ -4,6 +4,7 @@ import type { MindmapView } from './mindmap-view';
 import { DeleteNodeModal, DeleteOption } from '../ui/modals/delete-node-modal';
 import { getPrimaryZoteroLink } from '../utils/zotero';
 import { extractDrawingLink } from '../drawing/drawing-link';
+import { relationNodeKey } from './relations';
 import {
   addBlankDrawingAsChild,
   addBlankDrawingAsSibling,
@@ -157,7 +158,9 @@ export function appendNodeControls(box: HTMLElement, node: OutlineNode, view: Mi
   const hasParent = typeof view.getFlatNodes === 'function' && view.getFlatNodes().some((possibleParent) =>
     possibleParent.children.some((child) => child.line === node.line)
   );
-  if (hasParent) {
+  const hasExplicit = Boolean(view.file && Array.isArray(view.relations) &&
+    view.relations.some(rel => rel.target === relationNodeKey(view.app, view.file!, node)));
+  if (hasParent && !hasExplicit) {
     const arrow = box.createEl('button', { cls: 'eome-edge-arrow' });
     arrow.type = 'button';
     arrow.dataset.nodeLine = String(node.line);

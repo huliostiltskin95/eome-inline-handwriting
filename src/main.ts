@@ -12,9 +12,11 @@ import { MindmapView } from './view/mindmap-view';
 import {
   addBlankDrawingAsChild,
   addBlankDrawingAsSibling,
-  addBlankDrawingAsRoot
+  addBlankDrawingAsRoot,
+  addBlankDrawingWithRelation
 } from './drawing/drawing-actions';
 import { openInternalLink } from './utils/outline';
+import type { RelationKind } from './view/relations';
 import { renderMindmapEomeEmbed } from './embeds/eome-embed';
 import { exportMindmapViewToCanvas } from './commands/export-canvas';
 import { exportMindmapViewToPdf, exportMindmapViewToSvg } from './commands/export-vector';
@@ -86,6 +88,40 @@ export default class MindmapPlugin extends Plugin {
         return true;
       }
     });
+
+    this.addCommand({
+      id: 'toggle-eome-connect-mode',
+      name: 'Collega due nodi con Apple Pencil',
+      checkCallback: (checking) => {
+        const view = this.getActiveMindmapView();
+        if (checking) return Boolean(view);
+        if (!view) return false;
+        new Notice(view.toggleConnectionMode()
+          ? 'Collega: trascina la penna fra due nodi.' : 'Collega: disattivato.');
+        return true;
+      }
+    });
+
+    const newKinds: Array<[RelationKind, string]> = [
+      ['figlio', 'Nuovo figlio —'],
+      ['conseguenza', 'Nuova conseguenza —'],
+      ['dettaglio', 'Nuovo dettaglio a L'],
+      ['causa', 'Nuova causa a L']
+    ];
+    for (const [kind, name] of newKinds) {
+      this.addCommand({
+        id: 'add-handwritten-' + kind,
+        name,
+        checkCallback: checking => {
+          const view = this.getActiveMindmapView();
+          const node = view?.getSelectedNodes()[0];
+          if (checking) return Boolean(view && node);
+          if (!view || !node) return false;
+          void addBlankDrawingWithRelation(view, node, kind);
+          return true;
+        }
+      });
+    }
 
     this.addCommand({
       id: 'export-current-mindmap-to-canvas',

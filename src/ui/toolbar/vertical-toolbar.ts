@@ -5,9 +5,11 @@ import type { MindmapView } from '../../view/mindmap-view';
 import {
   addBlankDrawingAsChild,
   addBlankDrawingAsSibling,
-  addBlankDrawingAsRoot
+  addBlankDrawingAsRoot,
+  addBlankDrawingWithRelation
 } from '../../drawing/drawing-actions';
 import { Notice } from 'obsidian';
+import type { RelationKind } from '../../view/relations';
 import { LayoutOptionsMenu } from '../menus/layout-options-menu';
 import { NodeOptionsMenu, NodeOptions } from '../menus/node-options-menu';
 import { GeneralSettingsMenu } from '../menus/general-settings-menu';
@@ -67,7 +69,7 @@ export class VerticalToolbar {
     const createHandwrittenNodeButton = (
       icon: string,
       label: string,
-      place: 'child' | 'sibling'
+      kind: RelationKind | 'sibling'
     ): void => {
       const button = this.buttonsGroup.createEl('button');
       button.addClass('clickable-icon', 'eome-handwritten-create');
@@ -79,9 +81,9 @@ export class VerticalToolbar {
         const node = this.view.getSelectedNodes()[0];
         if (!this.view.inlineInkEnabled) this.view.toggleInlineInk();
         if (node) {
-          void (place === 'child'
-            ? addBlankDrawingAsChild(this.view, node)
-            : addBlankDrawingAsSibling(this.view, node));
+          void (kind === 'sibling'
+            ? addBlankDrawingAsSibling(this.view, node)
+            : addBlankDrawingWithRelation(this.view, node, kind));
         } else if (this.view.getFlatNodes().length === 0) {
           void addBlankDrawingAsRoot(this.view);
         } else {
@@ -89,8 +91,27 @@ export class VerticalToolbar {
         }
       };
     };
-    createHandwrittenNodeButton('file-pen-line', 'Nuovo nodo figlio manoscritto (o radice)', 'child');
-    createHandwrittenNodeButton('git-branch-plus', 'Nuovo nodo fratello manoscritto', 'sibling');
+
+    // The four relationships are chosen explicitly; two may use the same
+    // geometry without carrying the same semantic label.
+    createHandwrittenNodeButton('arrow-right', 'Nuovo figlio —', 'figlio');
+    createHandwrittenNodeButton('move-right', 'Nuova conseguenza —', 'conseguenza');
+    createHandwrittenNodeButton('corner-down-right', 'Nuovo dettaglio a L', 'dettaglio');
+    createHandwrittenNodeButton('git-branch', 'Nuova causa a L', 'causa');
+    createHandwrittenNodeButton('git-branch-plus', 'Nuovo fratello (stesso livello, nessuna relazione automatica)', 'sibling');
+
+    const connectButton = this.buttonsGroup.createEl('button');
+    connectButton.addClass('clickable-icon', 'eome-connect-toggle');
+    connectButton.setAttribute('type', 'button');
+    setIcon(connectButton, 'link-2');
+    connectButton.setAttribute('aria-label', 'Collega due nodi con Apple Pencil');
+    connectButton.setAttribute('title', 'Modalità Collega: trascina la penna da un nodo all’altro');
+    connectButton.setAttribute('aria-pressed', String(this.view.connectionMode));
+    connectButton.onclick = () => {
+      const enabled = this.view.toggleConnectionMode();
+      new Notice(enabled ? 'Collega: trascina la penna fra due nodi, poi scegli il rapporto.'
+        : 'Collega: disattivato. La penna torna a scrivere.');
+    };
 
     // Undo Button
     const undoBtn = this.buttonsGroup.createEl('button');
