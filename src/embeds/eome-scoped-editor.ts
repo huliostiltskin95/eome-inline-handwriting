@@ -260,6 +260,8 @@ export class EomeScopedEditor extends ItemView {
         parseOutline(outlineWithoutMapMarker(fence.content)).length > 0;
       this.firstNodeButton.disabled = this.creatingFirstNode;
     }
+    this.diagramObserver?.disconnect();
+    this.diagramObserver = null;
     this.unloadRenderedChildren();
     this.host.empty();
     this.status?.setText('');
@@ -298,8 +300,13 @@ export class EomeScopedEditor extends ItemView {
     // Keep a usable SVG/editor fallback until overlays have actually appeared.
     const updateBackup = (): void => {
       if (!this.backup || this.closed || generation !== this.renderGeneration) return;
-      const overlays = target.querySelectorAll('.mindmap-eome-overlay');
-      this.backup.hidden = overlays.length > 0;
+      const overlays = Array.from(target.querySelectorAll<HTMLElement>('.mindmap-eome-overlay'));
+      // Hiding the fallback before ink becomes visible recreates the blank-tab bug.
+      this.backup.hidden = overlays.some(overlay => {
+        const img = overlay.querySelector('img');
+        const box = overlay.getBoundingClientRect();
+        return !!img && img.complete && img.naturalWidth > 0 && box.width > 0 && box.height > 0;
+      });
     };
     const observer = new MutationObserver(updateBackup);
     observer.observe(target, { childList: true, subtree: true });
@@ -308,6 +315,10 @@ export class EomeScopedEditor extends ItemView {
     try {
       await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
       updateBackup();
+      target.querySelectorAll('img').forEach(img => {
+        img.addEventListener('load', updateBackup, { once: true });
+        img.addEventListener('error', updateBackup, { once: true });
+      });
       if (target.querySelector('.mindmap-eome-error')) {
         this.status?.setText('Il rendering grafico non è disponibile. I nodi restano accessibili qui sotto.');
       }
