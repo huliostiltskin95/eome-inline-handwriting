@@ -152,7 +152,9 @@ export function appendNodeControls(box: HTMLElement, node: OutlineNode, view: Mi
     }).open();
   });
 
-  const hasParent = view.getFlatNodes().some((possibleParent) =>
+  // The hierarchy check only applies to a complete mindmap view. Keep
+  // standalone node controls usable in isolated UI tests and partial views.
+  const hasParent = typeof view.getFlatNodes === 'function' && view.getFlatNodes().some((possibleParent) =>
     possibleParent.children.some((child) => child.line === node.line)
   );
   if (hasParent) {
