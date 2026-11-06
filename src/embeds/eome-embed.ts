@@ -96,8 +96,8 @@ async function measureNodes(
     if (drawingFile instanceof TFile && drawingFile.extension.toLowerCase() === 'svg') {
       const svg = await plugin.app.vault.cachedRead(drawingFile);
       const drawing = parseDrawingSvg(svg);
-      const viewBox = /\\bviewBox\\s*=\\s*["']\\s*([^"']+)["']/i.exec(svg);
-      const box = viewBox?.[1].trim().split(/[\\s,]+/).map(Number) ?? [];
+      const viewBox = /\bviewBox\s*=\s*["']\s*([^"']+)["']/i.exec(svg);
+      const box = viewBox?.[1].trim().split(/[\s,]+/).map(Number) ?? [];
       if (drawing && box.length === 4 && box.every(Number.isFinite)
         && box[2] > 0 && box[3] > 0) {
         const scale = Math.min(1, 320 / box[2], 220 / box[3]);
