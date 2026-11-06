@@ -50,6 +50,22 @@ export class EomeScopedEditor extends ItemView {
   private line = 0;
   private mapId: string | null = null;
   private closed = false;
+  private readOnly = false;
+  private splitRatio = 48;
+  private splitArea: HTMLElement | null = null;
+  private lowerPane: HTMLElement | null = null;
+  private editorPanel: HTMLElement | null = null;
+  private pendingRefresh = false;
+  private readonly onPanelOpened = (event: Event): void => {
+    this.editorPanel = (event as CustomEvent<HTMLElement>).detail;
+    this.applySplitState();
+  };
+  private readonly onPanelClosed = (): void => {
+    this.editorPanel = null;
+    this.applySplitState();
+    this.scheduleRefresh(this.pendingRefresh ? 30 : 120);
+    this.pendingRefresh = false;
+  };
 
   constructor(leaf: WorkspaceLeaf, private readonly plugin: MindmapPlugin) {
     super(leaf);
@@ -98,24 +114,93 @@ export class EomeScopedEditor extends ItemView {
           (error instanceof Error ? error.message : String(error)));
       });
     });
-    toolbar.createDiv({
-      cls: 'eome-scoped-instructions',
-      text: 'Seleziona un nodo e usa gli strumenti. Lazo nodi → Crea sintesi per riassumere un gruppo.'
+    const viewButton = toolbar.createEl('button', { text: 'Solo visualizzazione', attr: { 'aria-pressed': 'false', title: 'Nasconde gli strumenti di modifica' } });
+    viewButton.addEventListener('click', () => {
+      if (this.editorPanel) {
+        new Notice('Salva o annulla il disegno prima di passare alla sola lettura.');
+        return;
+      }
+      this.readOnly = !this.readOnly;
+      viewButton.setText(this.readOnly ? 'Attiva modifica' : 'Solo visualizzazione');
+      viewButton.setAttribute('aria-pressed', String(this.readOnly));
+      this.applySplitState();
+      this.scheduleRefresh(0);
+    });
+    const saveClose = toolbar.createEl('button', { text: 'Salva e chiudi' });
+    saveClose.addEventListener('click', () => {
+      if (this.editorPanel) {
+        new Notice('Salva o annulla il disegno prima di chiudere la mappa.');
+        return;
+      }
+      void (async () => {
+        if (!this.file) return;
+        await this.app.vault.read(this.file);
+        this.leaf.detach();
+      })().catch(error => {
+        console.error('EOME close failed:', error);
+        new Notice('Impossibile chiudere la mappa.');
+      });
     });
     this.status = this.contentEl.createDiv({ cls: 'eome-tab-render-status' });
-    this.host = this.contentEl.createDiv({ cls: 'eome-scoped-editor-host' });
+    this.splitArea = this.contentEl.createDiv({ cls: 'eome-scoped-split' });
+    this.host = this.splitArea.createDiv({ cls: 'eome-scoped-editor-host' });
+    const divider = this.splitArea.createDiv({
+      cls: 'eome-scoped-splitter',
+      attr: { role: 'separator', tabindex: '0', 'aria-label': 'Ridimensiona anteprima ed editor', 'aria-orientation': 'horizontal', 'aria-valuemin': '20', 'aria-valuemax': '80', 'aria-valuenow': String(this.splitRatio) }
+    });
+    divider.createDiv({ cls: 'eome-scoped-splitter-handle' });
+    this.lowerPane = this.splitArea.createDiv({ cls: 'eome-scoped-lower-pane' });
+    this.lowerPane.createDiv({ cls: 'eome-scoped-editor-placeholder', text: 'Seleziona un nodo manoscritto nella mappa per modificarlo qui sotto.' });
+    const setRatio = (value: number): void => {
+      this.splitRatio = Math.min(80, Math.max(20, Math.round(value)));
+      divider.setAttribute('aria-valuenow', String(this.splitRatio));
+      this.applySplitState();
+    };
+    divider.addEventListener('pointerdown', event => {
+      if (this.readOnly || !this.splitArea) return;
+      event.preventDefault();
+      divider.setPointerCapture(event.pointerId);
+      const move = (e: PointerEvent): void => {
+        if (!this.splitArea) return;
+        const rect = this.splitArea.getBoundingClientRect();
+        if (rect.height > 0) setRatio((e.clientY - rect.top) * 100 / rect.height);
+      };
+      const end = (): void => {
+        divider.removeEventListener('pointermove', move);
+        divider.removeEventListener('pointerup', end);
+        divider.removeEventListener('pointercancel', end);
+      };
+      divider.addEventListener('pointermove', move);
+      divider.addEventListener('pointerup', end);
+      divider.addEventListener('pointercancel', end);
+    });
+    divider.addEventListener('keydown', event => {
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      event.preventDefault();
+      setRatio(this.splitRatio + (event.key === 'ArrowDown' ? 5 : -5));
+    });
+    this.contentEl.addEventListener('eome-editor-opened', this.onPanelOpened);
+    this.contentEl.addEventListener('eome-editor-closed', this.onPanelClosed);
+    this.applySplitState();
     this.registerEvent(this.app.vault.on('modify', changed => {
       if (!this.file) return;
       if (changed.path === this.file.path) {
         this.scheduleRefresh(120);
       }
     }));
-    this.contentEl.addEventListener('eome-editor-closed', () => this.scheduleRefresh(150));
+
     if (this.file) await this.refresh();
   }
 
+  private applySplitState(): void {
+    this.contentEl.classList.toggle('eome-scoped-readonly', this.readOnly);
+    this.splitArea?.style.setProperty('--eome-preview-percent', this.splitRatio + '%');
+    if (this.lowerPane) this.lowerPane.hidden = this.readOnly;
+    if (this.firstNodeButton) this.firstNodeButton.disabled = this.readOnly || this.creatingFirstNode;
+  }
+
   private async createFirstNode(): Promise<void> {
-    if (this.creatingFirstNode || this.closed || !this.file || !this.host) return;
+    if (this.readOnly || this.creatingFirstNode || this.closed || !this.file || !this.host) return;
     const current = this.locate(await this.app.vault.read(this.file));
     if (!current || parseOutline(outlineWithoutMapMarker(current.content)).length > 0) {
       new Notice('La mappa non è vuota o non è più identificabile.');
@@ -146,6 +231,7 @@ export class EomeScopedEditor extends ItemView {
 
   private scheduleRefresh(delay: number): void {
     if (this.closed) return;
+    if (this.editorPanel) { this.pendingRefresh = true; return; }
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     this.refreshTimer = window.setTimeout(() => {
       this.refreshTimer = null;
@@ -281,7 +367,7 @@ export class EomeScopedEditor extends ItemView {
 
   private async refresh(): Promise<void> {
     if (this.closed || !this.host || !this.file) return;
-    if (this.contentEl.querySelector('.eome-map-drawing-panel')) return;
+    if (this.editorPanel || this.contentEl.querySelector('.eome-map-drawing-panel')) { this.pendingRefresh = true; return; }
     const generation = ++this.renderGeneration;
     const markdown = await this.app.vault.read(this.file);
     if (this.closed || generation !== this.renderGeneration || !this.host) return;
@@ -359,7 +445,7 @@ export class EomeScopedEditor extends ItemView {
     observer.observe(target, { childList: true, subtree: true });
     this.diagramObserver = observer;
     try {
-      await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
+      await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, this.readOnly ? 'preview' : 'editor');
       updateBackup();
       target.querySelectorAll('img').forEach(img => {
         img.addEventListener('load', updateBackup, { once: true });
@@ -379,6 +465,8 @@ export class EomeScopedEditor extends ItemView {
 
   async onClose(): Promise<void> {
     this.closed = true;
+    this.contentEl.removeEventListener('eome-editor-opened', this.onPanelOpened);
+    this.contentEl.removeEventListener('eome-editor-closed', this.onPanelClosed);
     this.renderGeneration++;
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
@@ -392,6 +480,9 @@ export class EomeScopedEditor extends ItemView {
     this.backup = null;
     this.status = null;
     this.firstNodeButton = null;
+    this.splitArea = null;
+    this.lowerPane = null;
+    this.editorPanel = null;
     // The source Markdown preview stays in its own tab, like a PDF embed.
     // A rerender accounts for SVG-only modifications without changing prose.
     for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
