@@ -160,10 +160,17 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
         relationNodeKey(context.plugin.app, context.file, newNode), kind, arrow) : existing);
 
   } catch (error) {
-    console.error('Inline EOME node creation failed', error);
+    console.error('Inline EOME node creation failed', {
+      folder: context.plugin.svgFolder,
+      note: context.file.path,
+      attachment: attachment?.path ?? null,
+      error,
+    });
+    const detail = error instanceof Error ? error.message : String(error);
     new Notice(attachment
-      ? 'SVG creato, ma non collegato al blocco: ' + attachment.path
-      : 'Impossibile creare il nodo manoscritto.');
+      ? 'SVG creato in ' + attachment.path + ', ma il nodo non è stato collegato: ' + detail
+      : 'Impossibile creare il nodo manoscritto in ' +
+        context.plugin.svgFolder + ': ' + detail, 11000);
   }
 }
 
