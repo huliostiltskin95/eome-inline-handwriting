@@ -189,6 +189,11 @@ async function renderOverlays(
   sizeMap: Map<number, { w: number; h: number }>,
   inline = false
 ): Promise<void> {
+  // Replacing image overlays after an SVG save must not clear the node the
+  // user is currently writing on or wants to branch from.
+  const selected = new Set(Array.from(wrapper.querySelectorAll<HTMLElement>(
+    '.mindmap-eome-overlay.selected[data-node-line]'))
+    .map(node => node.dataset.nodeLine));
   wrapper.querySelectorAll('[data-mindmap-eome-overlay]').forEach((overlay) => overlay.remove());
 
   const css = getComputedStyle(document.documentElement);
@@ -211,6 +216,7 @@ async function renderOverlays(
     box.className = 'mindmap-overlay mindmap-eome-overlay';
     box.dataset.mindmapEomeOverlay = '1';
     box.dataset.nodeLine = String(node.line);
+    if (selected.has(String(node.line))) box.classList.add('selected');
     box.setCssProps({
       '--mindmap-left': `${position.x}px`,
       '--mindmap-top': `${position.y}px`,
