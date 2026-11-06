@@ -256,8 +256,14 @@ export function routeRelations(nodes: readonly RouteNode[], relations: readonly 
         && target.y - target.h / 2 > source.y + source.h / 2) {
         const start = point(source.x - source.w / 2 + 20, source.y + source.h / 2 + 7);
         const end = point(target.x - target.w / 2 - 7, target.y);
-        const starts = [0.2, 0.35, 0.5, 0.65].map(fraction =>
-          point(source.x - source.w / 2 + source.w * fraction,
+        // A detail must descend first and then turn *right* into the
+        // indented child; choose only anchors left of its entry point.
+        const starts = [12, 20, 28, 36].map(offset =>
+          point(source.x - source.w / 2 + offset,
+            source.y + source.h / 2 + 7))
+          .filter(candidate => candidate.x < end.x - 5);
+        if (!starts.length)
+          starts.push(point(Math.min(end.x - 8, source.x - source.w / 2 + 12),
             source.y + source.h / 2 + 7));
         points = chooseRoute(starts.map(s => [s, point(s.x, end.y), end]), obstacles, paths);
       } else {
