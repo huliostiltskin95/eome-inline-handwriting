@@ -60,17 +60,16 @@ async function ensureFolders(app: App, folder: string): Promise<string> {
 export async function createEomeSvg(app: App, folderSetting: string,
   filename: string, svg: string): Promise<TFile> {
   const folder = await ensureFolders(app, validateSvgFolder(folderSetting));
-  const safe = filename.replace(/[\\/:*?"<>|\x00-\x1f]/g, '-').trim().replace(/\.+$/, '');
-  const base = (safe.toLowerCase().endsWith('.svg') ? safe.slice(0, -4) : safe) || 'EOME drawing';
-  for (let n = 0; n < 10000; n++) {
-    const suffix = n ? ' ' + n : '';
-    const path = folder + '/' + base + suffix + '.svg';
-    if (findVaultEntry(app, path)) continue;
-    if (await app.vault.adapter.exists(path)) continue;
+  // Every generated attachment receives a UUID v4. The requested descriptive
+  // filename is deliberately ignored: names such as "Untitled 1.svg" are not
+  // stable or unique across notes and synchronised devices.
+  void filename;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const path = folder + '/' + crypto.randomUUID() + '.svg';
+    if (findVaultEntry(app, path) || await app.vault.adapter.exists(path)) continue;
     try {
       return await app.vault.create(path, svg);
     } catch (error) {
-      // A second device may have created this filename after our check.
       if (findVaultEntry(app, path) || await app.vault.adapter.exists(path)) continue;
       throw new Error('Impossibile salvare ' + path + ': ' +
         (error instanceof Error ? error.message : String(error)));
