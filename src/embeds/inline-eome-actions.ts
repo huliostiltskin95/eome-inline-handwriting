@@ -3,6 +3,7 @@ import type MindmapPlugin from '../main';
 import { parseOutline, type OutlineNode } from '../utils/outline';
 import { INLINE_MAPS_FIELD, inlineMapId, stampInlineMap } from './inline-eome-identity';
 import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from '../drawing/drawing-svg';
+import { createEomeSvg } from '../drawing/svg-folder';
 import { extractDrawingLink } from '../drawing/drawing-link';
 import { PenPreferenceStore } from '../drawing/pen-preferences';
 import { InlineInkController } from '../drawing/inline-ink';
@@ -130,10 +131,8 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
   }
   let attachment: TFile | null = null;
   try {
-    const path = await context.plugin.app.fileManager.getAvailablePathForAttachment(
-      'EOME manoscritto.svg', context.file.path
-    );
-    attachment = await context.plugin.app.vault.create(path, createDrawingSvg([]));
+    attachment = await createEomeSvg(context.plugin.app, context.plugin.svgFolder,
+      'EOME manoscritto.svg', createDrawingSvg([]));
     const link = context.plugin.app.metadataCache.fileToLinktext(attachment, context.file.path, true);
     const embed = '![[ ' + link + ' ]]';
     const normalizedEmbed = embed.replace('![[ ', '![[').replace(' ]]', ']]');
