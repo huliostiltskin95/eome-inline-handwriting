@@ -21,12 +21,12 @@ export function findInlineFenceAtLine(markdown: string, line: number): InlineEom
 
 export function findInlineFenceById(markdown: string, id: string): InlineEomeFence | null {
   const matches = fences(markdown).filter(fence =>
-    fence.content.split(/\\r?\\n/).some(line => line.trim() === '<!-- eome-map-id: ' + id + ' -->'));
+    fence.content.split(/\r?\n/).some(line => line.trim() === '<!-- eome-map-id: ' + id + ' -->'));
   return matches.length === 1 ? matches[0] : null;
 }
 
 export function findInlineFenceByContent(markdown: string, content: string): InlineEomeFence | null {
-  const normalized = (value: string): string => value.replace(/\\r\\n/g, '\\n').trim();
+  const normalized = (value: string): string => value.replace(/\r\n/g, '\n').trim();
   const matches = fences(markdown).filter(fence => normalized(fence.content) === normalized(content));
   return matches.length === 1 ? matches[0] : null;
 }
