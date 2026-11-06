@@ -26,7 +26,7 @@ import { isInlineMindmapSource, findInlineFenceAtLine, findInlineFenceByContent,
 import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD } from './inline-eome-identity';
 import { normalizeRelations } from '../view/relations';
 import {
-  addInlineDrawing,
+  addInlineDrawing, createFirstInlineDrawing,
   showInlineCreateMenu, showInlineArrowMenu,
   editInlineDrawing, connectInlineHandwriting
 } from './inline-eome-actions';
@@ -404,10 +404,19 @@ export async function renderMindmapEomeEmbed(
     el.empty();
     const start = el.createDiv({ cls: 'mindmap-eome-empty' });
     start.createEl('p', { text: 'Mappa manoscritta vuota' });
-    const add = start.createEl('button', { text: inlineContext ? '+ Prima parola' : 'Apri mappa EOME' });
+    const add = start.createEl('button', {
+      text: inlineContext ? '+ Crea il primo nodo · editor avanzato' : 'Apri mappa EOME',
+      cls: inlineContext ? 'mod-cta eome-create-first-node' : ''
+    });
     add.addEventListener('click', () => {
-      if (inlineContext) void addInlineDrawing(inlineContext, [], null, 'figlio', 'none');
-      else void openSelected();
+      if (inlineContext) {
+        add.disabled = true;
+        void createFirstInlineDrawing(inlineContext).catch(error => {
+          console.error('EOME first node advanced editor failed', error);
+          new Notice('Impossibile aprire l’editor del primo nodo: ' +
+            (error instanceof Error ? error.message : String(error)));
+        }).finally(() => { if (add.isConnected) add.disabled = false; });
+      } else void openSelected();
     });
     return;
   }
