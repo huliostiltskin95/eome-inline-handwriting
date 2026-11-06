@@ -2231,3 +2231,21 @@ body.is-mobile .eome-drawing-footer button,
   border: 1px solid var(--background-modifier-border);
   border-radius: 9px; background: var(--background-primary);
 }
+
+/* 0.3.8 — compact pen-first editing controls with accessible 44px targets. */
+.mindmap-eome-inline .mindmap-eome-ink-tools {
+  right: 104px;
+  display: flex;
+  gap: 4px;
+  max-width: calc(100% - 112px);
+  flex-wrap: wrap;
+}
+.mindmap-eome-inline .mindmap-eome-ink-tools button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.mindmap-eome-inline .mindmap-eome-ink-tools button[aria-pressed="true"] {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
