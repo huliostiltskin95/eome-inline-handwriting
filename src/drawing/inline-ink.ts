@@ -41,6 +41,7 @@ export class InlineInkController {
   private readonly pendingPreviews = new Set<SVGSVGElement>();
   private refreshTimer: number | null = null;
   private readonly compactTimers = new Map<string, number>();
+  private readonly redoItems = new Map<string, ExportedDrawingItem>();
 
   constructor(private readonly view: MindmapView, private readonly wrapper: HTMLElement) {}
 
@@ -130,6 +131,49 @@ export class InlineInkController {
     this.pendingPreviews.add(session.preview);
     void this.enqueueSave(session);
     return true;
+  }
+
+  /** Remove the most recent inline pen stroke on the selected SVG only. */
+  async undoLastStroke(line: number): Promise<boolean> {
+    const attachment = this.drawingAtLine(line);
+    if (!attachment) return false;
+    await (this.queues.get(attachment.path) ?? Promise.resolve()).catch(() => {});
+    const before = await this.view.app.vault.read(attachment);
+    const drawing = parseDrawingSvg(before);
+    if (!drawing || !drawing.items.length) return false;
+    const last = drawing.items[drawing.items.length - 1];
+    if (!last.id?.startsWith('inline-')) return false;
+    this.redoItems.set(attachment.path, last);
+    await this.view.app.vault.modify(attachment, createDrawingSvg(
+      drawing.items.slice(0, -1), drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
+    this.view.attachmentVersions.markCurrent(attachment);
+    await this.view.refreshRenderedAttachments(attachment);
+    return true;
+  }
+
+  async redoLastStroke(line: number): Promise<boolean> {
+    const attachment = this.drawingAtLine(line);
+    if (!attachment) return false;
+    await (this.queues.get(attachment.path) ?? Promise.resolve()).catch(() => {});
+    const item = this.redoItems.get(attachment.path);
+    if (!item) return false;
+    const before = await this.view.app.vault.read(attachment);
+    const drawing = parseDrawingSvg(before);
+    if (!drawing || drawing.items.some(existing => existing.id === item.id)) return false;
+    await this.view.app.vault.modify(attachment, createDrawingSvg(
+      [...drawing.items, item], drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
+    this.redoItems.delete(attachment.path);
+    this.view.attachmentVersions.markCurrent(attachment);
+    await this.view.refreshRenderedAttachments(attachment);
+    return true;
+  }
+
+  private drawingAtLine(line: number): TFile | null {
+    const node = this.view.getNodeByLine(line);
+    const link = node && extractDrawingLink(node.text);
+    if (!link || !this.view.file) return null;
+    const found = this.view.app.metadataCache.getFirstLinkpathDest(link, this.view.file.path);
+    return found instanceof TFile && found.extension.toLowerCase() === 'svg' ? found : null;
   }
 
   cancel(): void {
@@ -256,6 +300,7 @@ export class InlineInkController {
     }));
     if (points.length === 1) points.push({ ...points[0], x: points[0].x + 0.01 });
     const pen = await this.view.penPreferences.load();
+    this.redoItems.delete(session.attachment.path);
     const item: ExportedDrawingItem = {
       id: `inline-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       type: 'pen',

@@ -1,0 +1,19 @@
+name: Verify EOME
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feat/inline-isolation-layout-pen-20261106
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
