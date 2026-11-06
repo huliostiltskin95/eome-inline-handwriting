@@ -1,6 +1,6 @@
 import {
   Component,
-  Modal,
+  Notice,
   MarkdownPostProcessorContext,
   MarkdownRenderChild,
   MarkdownRenderer,
@@ -20,7 +20,8 @@ import { arrangeTopLevelTrees } from '../view/tree-layout';
 import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRelation } from '../view/relations';
 import { routeRelations, type RouteNode } from '../view/relations-routing';
 import { appendRelationGeometry } from '../view/relations-overlay';
-import { isInlineMindmapSource } from './inline-eome-source';
+import { isInlineMindmapSource, findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById } from './inline-eome-source';
+import { inlineMapId } from './inline-eome-identity';
 import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD } from './inline-eome-identity';
 import { normalizeRelations } from '../view/relations';
 import {
@@ -301,7 +302,8 @@ export async function renderMindmapEomeEmbed(
   plugin: MindmapPlugin,
   source: string,
   el: HTMLElement,
-  ctx: MarkdownPostProcessorContext
+  ctx: MarkdownPostProcessorContext,
+  mode: 'preview' | 'editor' = 'preview'
 ): Promise<void> {
   el.classList.add('mindmap-eome-host');
   el.parentElement?.classList.add('mindmap-eome-codeblock');
@@ -339,7 +341,20 @@ export async function renderMindmapEomeEmbed(
   const relations = inline
     ? allRelations.filter(relation => nodeKeys.has(relation.source) && nodeKeys.has(relation.target))
     : allRelations;
-  const inlineContext = inline ? { plugin, file, source, container: el, ctx } : null;
+  const inlineContext = inline && mode === 'editor' ? { plugin, file, source, container: el, ctx } : null;
+  const openSelected = async (): Promise<void> => {
+    if (!inline) return;
+    const content = await plugin.app.vault.read(file);
+    const id = inlineMapId(source);
+    const position = ctx.getSectionInfo(el)?.lineStart;
+    const atLine = typeof position === 'number' ? findInlineFenceAtLine(content, position) : null;
+    const selected = (id ? findInlineFenceById(content, id) : null)
+      ?? (atLine && atLine.content.trim() === source.trim() ? atLine : null)
+      ?? findInlineFenceByContent(content, source);
+    if (!selected) { new Notice('Blocco EOME non identificabile: aprilo con il cursore sul blocco.'); return; }
+    const { openScopedEomeEditor } = await import('./eome-scoped-editor');
+    openScopedEomeEditor(plugin, file, selected);
+  };
   if (!isOutlineCompatible(markdown)) {
     renderError(el, `mindmap-eome: ${file.name} is not a compatible mindmap outline.`);
     return;
@@ -348,16 +363,17 @@ export async function renderMindmapEomeEmbed(
   const roots = parseOutline(markdown);
   const flat = flattenOutline(roots);
   if (flat.length === 0) {
-    if (!inlineContext) {
+    if (!inline) {
       renderError(el, `mindmap-eome: ${file.name} has no outline nodes.`);
       return;
     }
     el.empty();
     const start = el.createDiv({ cls: 'mindmap-eome-empty' });
     start.createEl('p', { text: 'Mappa manoscritta vuota' });
-    const add = start.createEl('button', { text: '+ Crea la prima parola' });
+    const add = start.createEl('button', { text: inlineContext ? '+ Prima parola' : 'Apri mappa EOME' });
     add.addEventListener('click', () => {
-      void addInlineDrawing(inlineContext, [], null, 'figlio', 'none');
+      if (inlineContext) void addInlineDrawing(inlineContext, [], null, 'figlio', 'none');
+      else void openSelected();
     });
     return;
   }
@@ -407,27 +423,17 @@ export async function renderMindmapEomeEmbed(
       event.preventDefault();
       void editInlineDrawing(inlineContext, roots, node);
     });
+  } else if (inline) {
     const openButton = wrapper.createEl('button', {
       cls: 'mindmap-eome-open-button',
-      attr: { 'aria-label': 'Espandi solo questa mappa' },
+      attr: { 'aria-label': 'Apri questa mappa EOME' },
     });
     setIcon(openButton, 'expand');
-    openButton.setAttribute('title', 'Apri solo questa mappa');
+    openButton.setAttribute('title', 'Apri questa mappa in una finestra');
     openButton.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      const section = ctx.getSectionInfo(el);
-      const modal = new Modal(plugin.app);
-      modal.contentEl.addClass('mindmap-eome-standalone-modal');
-      modal.setTitle('Mappa EOME');
-      modal.open();
-      const standalone = modal.contentEl.createDiv();
-      const scopedContext = {
-        ...ctx,
-        getSectionInfo: () => section,
-        addChild: (child: MarkdownRenderChild) => ctx.addChild(child)
-      } as MarkdownPostProcessorContext;
-      void renderMindmapEomeEmbed(plugin, source, standalone, scopedContext);
+      void openSelected();
     });
   } else {
     const openButton = wrapper.createEl('button', {
