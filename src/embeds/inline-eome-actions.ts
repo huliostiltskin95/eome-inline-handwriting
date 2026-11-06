@@ -13,6 +13,11 @@ import { createOrUpdateRelation, normalizeRelations, relationNodeKey, RELATIONS_
 import { isInlineMindmapSource, insertHandwrittenNode, replaceInlineMindmapFence } from './inline-eome-source';
 import type { ExportedDrawingItem } from '../drawing/types';
 
+const pendingFocus = new Map<string, { link: string; remaining: number }>();
+function focusKey(file: TFile, source: string): string {
+  return file.path + ':' + (inlineMapId(source) ?? '');
+}
+
 const ARROWS: Array<[RelationArrowMode, string]> = [
   ['none', 'Nessuna freccia'],
   ['start', 'Freccia all’inizio'],
@@ -141,6 +146,7 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
     const newNode = updated.find(node => extractDrawingLink(node.text)?.trim() === link.trim());
     const previous = selected ? updated.find(node => node.line === selected.line) : null;
     if (!newNode || (selected && !previous)) throw new Error('Identità del nodo non trovata.');
+    pendingFocus.set(focusKey(context.file, next), { link: link.trim(), remaining: 3 });
     await updateFence(context, next);
     await modifyInlineRelations(context, next, existing =>
       previous ? createOrUpdateRelation(existing,
@@ -206,12 +212,43 @@ export function connectInlineHandwriting(
   const toolbar = wrapper.createDiv({ cls: 'mindmap-eome-ink-tools' });
   const undo = toolbar.createEl('button', { text: '↶', attr: { 'aria-label': 'Annulla ultimo tratto' } });
   const redo = toolbar.createEl('button', { text: '↷', attr: { 'aria-label': 'Ripristina ultimo tratto' } });
+  const eraser = toolbar.createEl('button', { text: '⌫', attr: { 'aria-label': 'Cancellino vettoriale' } });
+  eraser.setAttribute('aria-pressed', 'false');
+  eraser.addEventListener('click', () => {
+    const enabled = !controller.isEraserEnabled();
+    controller.setEraserEnabled(enabled);
+    eraser.setAttribute('aria-pressed', String(enabled));
+    eraser.setAttribute('title', enabled ? 'Tocca un tratto per cancellarlo' : 'Attiva cancellino vettoriale');
+  });
+  const parallel = toolbar.createEl('button', { text: '—+', attr: { 'aria-label': 'Crea nodo parallelo' } });
+  const detail = toolbar.createEl('button', { text: '└+', attr: { 'aria-label': 'Crea dettaglio sotto il nodo' } });
+
   const selectedLine = (): number | null => {
     const selected = wrapper.querySelector<HTMLElement>('.mindmap-eome-overlay.selected[data-node-line]');
     if (!selected) return null;
     const line = Number(selected.dataset.nodeLine);
     return Number.isFinite(line) ? line : null;
   };
+  const pending = pendingFocus.get(focusKey(context.file, context.source));
+  if (pending) {
+    const node = flat.find(item => extractDrawingLink(item.text)?.trim() === pending.link);
+    const overlay = node && wrapper.querySelector<HTMLElement>(
+      '.mindmap-eome-overlay[data-node-line="' + node.line + '"]');
+    if (overlay) {
+      overlay.classList.add('selected');
+      if (--pending.remaining <= 0) pendingFocus.delete(focusKey(context.file, context.source));
+    }
+  }
+  const quickAdd = (kind: RelationKind): void => {
+    const line = selectedLine();
+    if (line === null && flat.length) {
+      new Notice('Seleziona prima il nodo dal quale proseguire.');
+      return;
+    }
+    void addInlineDrawing(context, parseOutline(context.source), line, kind, 'none');
+  };
+  parallel.addEventListener('click', () => quickAdd('figlio'));
+  detail.addEventListener('click', () => quickAdd('dettaglio'));
   const run = (action: 'undo' | 'redo') => {
     const line = selectedLine();
     if (line === null) { new Notice('Seleziona prima il nodo manoscritto.'); return; }
