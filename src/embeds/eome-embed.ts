@@ -1,5 +1,6 @@
 import {
   Component,
+  Modal,
   MarkdownPostProcessorContext,
   MarkdownRenderChild,
   MarkdownRenderer,
@@ -321,7 +322,13 @@ export async function renderMindmapEomeEmbed(
 
   const markdown = inline ? source : await plugin.app.vault.read(file);
   const explicitConnections = inline || hasExplicitRelationSchema(plugin.app, file);
-  const relations = explicitConnections ? readRelations(plugin.app, file) : [];
+  // A fenced map may only draw links whose endpoints belong to that fence.
+  // The host note can contain multiple maps and unrelated YAML metadata.
+  const allRelations = explicitConnections ? readRelations(plugin.app, file) : [];
+  const nodeKeys = new Set(flattenOutline(parseOutline(markdown)).map(node => relationNodeKey(plugin.app, file, node)));
+  const relations = inline
+    ? allRelations.filter(relation => nodeKeys.has(relation.source) && nodeKeys.has(relation.target))
+    : allRelations;
   const inlineContext = inline ? { plugin, file, source, container: el, ctx } : null;
   if (!isOutlineCompatible(markdown)) {
     renderError(el, `mindmap-eome: ${file.name} is not a compatible mindmap outline.`);
@@ -389,6 +396,28 @@ export async function renderMindmapEomeEmbed(
       if (!node || !inlineContext) return;
       event.preventDefault();
       void editInlineDrawing(inlineContext, roots, node);
+    });
+    const openButton = wrapper.createEl('button', {
+      cls: 'mindmap-eome-open-button',
+      attr: { 'aria-label': 'Espandi solo questa mappa' },
+    });
+    setIcon(openButton, 'expand');
+    openButton.setAttribute('title', 'Apri solo questa mappa');
+    openButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const section = ctx.getSectionInfo(el);
+      const modal = new Modal(plugin.app);
+      modal.contentEl.addClass('mindmap-eome-standalone-modal');
+      modal.setTitle('Mappa EOME');
+      modal.open();
+      const standalone = modal.contentEl.createDiv();
+      const scopedContext = {
+        ...ctx,
+        getSectionInfo: () => section,
+        addChild: (child: MarkdownRenderChild) => ctx.addChild(child)
+      } as MarkdownPostProcessorContext;
+      void renderMindmapEomeEmbed(plugin, source, standalone, scopedContext);
     });
   } else {
     const openButton = wrapper.createEl('button', {
