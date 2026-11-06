@@ -84,7 +84,7 @@ export default class MindmapPlugin extends Plugin {
             new Notice('Il blocco EOME è cambiato: riposiziona il cursore e riprova.');
             return;
           }
-          openScopedEomeEditor(this, file, current);
+          await openScopedEomeEditor(this, file, current);
         }).catch((error: unknown) => {
           console.error('EOME scoped editor startup failed', error);
           new Notice('Impossibile aprire la mappa EOME.');
