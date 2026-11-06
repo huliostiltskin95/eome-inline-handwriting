@@ -2361,3 +2361,32 @@ body.is-mobile .eome-drawing-footer button,
   .eome-scoped-tab .eome-scoped-instructions { font-size: var(--font-ui-smaller); }
   .eome-scoped-tab .mindmap-eome-wrapper { height: max(460px, 100%); }
 }
+
+/* Initial EOME node: prominent tab-level action, visible even when the
+   diagram contains no selectable SVG elements. */
+.eome-scoped-tab .eome-scoped-main-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 4px 4px 12px;
+}
+.eome-scoped-tab .eome-scoped-main-toolbar .eome-create-first-node {
+  min-height: 44px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.eome-scoped-tab .eome-scoped-main-toolbar .eome-create-first-node[hidden] {
+  display: none;
+}
+.eome-scoped-tab .eome-scoped-main-toolbar .eome-scoped-instructions {
+  flex: 1 1 260px;
+  padding: 0;
+}
+.eome-scoped-tab .mindmap-eome-empty .eome-create-first-node {
+  min-height: 46px;
+  padding: 9px 16px;
+  font-weight: 600;
+}
