@@ -128,14 +128,14 @@ export function showInlineArrowMenu(context: InlineContext, relation: EomeRelati
 
 export async function addInlineDrawing(context: InlineContext, nodes: OutlineNode[],
   line: number | null, kind: RelationKind, arrow: RelationArrowMode,
-  initialItems?: ExportedDrawingItem[]): Promise<void> {
-  if (!isInlineMindmapSource(context.source)) return;
+  initialItems?: ExportedDrawingItem[]): Promise<{ source: string; line: number; link: string } | null> {
+  if (!isInlineMindmapSource(context.source)) return null;
   const flatten = (values: OutlineNode[]): OutlineNode[] =>
     values.reduce((acc, node) => [...acc, node, ...flatten(node.children)], [] as OutlineNode[]);
   const selected = line === null ? null : flatten(nodes).find(n => n.line === line);
   if (line !== null && !selected) {
     new Notice('Il nodo selezionato non è più presente nel blocco.');
-    return;
+    return null;
   }
   let attachment: TFile | null = null;
   try {
@@ -160,6 +160,7 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
       previous ? createOrUpdateRelation(existing,
         relationNodeKey(context.plugin.app, context.file, previous),
         relationNodeKey(context.plugin.app, context.file, newNode), kind, arrow) : existing);
+    return { source: next, line: newNode.line, link };
 
   } catch (error) {
     console.error('Inline EOME node creation failed', {
@@ -173,6 +174,7 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
       ? 'SVG creato in ' + attachment.path + ', ma il nodo non è stato collegato: ' + detail
       : 'Impossibile creare il nodo manoscritto in ' +
         context.plugin.svgFolder + ': ' + detail, 11000);
+    return null;
   }
 }
 
@@ -231,6 +233,124 @@ export async function createFirstInlineDrawing(context: InlineContext): Promise<
     } as unknown as MarkdownPostProcessorContext
   };
   await addInlineDrawing(latestContext, [], null, 'figlio', 'none', result.items);
+}
+
+/** Serial handwritten creation. The next canvas opens directly on Save +
+ * parallel/L, without navigating through the map. A cancelled or blank
+ * drawing creates no SVG or Markdown entry.
+ */
+async function createInlineDrawingSeries(
+  context: InlineContext, parentLine: number,
+  relation: RelationKind,
+  initialResult?: { items: ExportedDrawingItem[]; next?: 'parallel' | 'elbow' }
+): Promise<void> {
+  const { openDrawingModal } = await import('../drawing/drawing-modal');
+  const preferences = new PenPreferenceStore(context.plugin);
+  let source = context.source;
+  let line = parentLine;
+  let kind = relation;
+  let queued = initialResult;
+  while (true) {
+    const result = queued ?? await openDrawingModal(
+      context.plugin.app, [], undefined, preferences, true);
+    queued = undefined;
+    if (!result) return;
+    const hasContent = result.items.some(item =>
+      item.type !== 'pen' || (Array.isArray(item.data.path) && item.data.path.length > 0));
+    if (!hasContent) {
+      new Notice('Disegno vuoto: nessun nuovo nodo creato.');
+      return;
+    }
+    const appended = await addInlineDrawing(
+      { ...context, source }, parseOutline(source), line, kind, 'none', result.items);
+    if (!appended) return;
+    source = appended.source;
+    line = appended.line;
+    if (!result.next) return;
+    kind = result.next === 'parallel' ? 'figlio' : 'dettaglio';
+  }
+}
+
+/** Open an advanced drawing editor for a related node, and keep it open across
+ * Save + parallel/L actions. Intended for menus and touch long presses.
+ */
+export async function createRelatedInlineDrawing(
+  context: InlineContext, node: OutlineNode, kind: RelationKind
+): Promise<void> {
+  await createInlineDrawingSeries(context, node.line, kind);
+}
+
+/** One context menu for the graph and the SVG fallback gallery. */
+export function showInlineNodeMenu(context: InlineContext, roots: OutlineNode[],
+  node: OutlineNode, position: { x: number; y: number }): void {
+  const menu = new Menu();
+  menu.addItem(item => item.setTitle('Modifica nodo · editor avanzato')
+    .setIcon('pencil').onClick(() => {
+      void editInlineDrawing(context, roots, node);
+    }));
+  menu.addSeparator();
+  menu.addItem(item => item.setTitle('Nuovo parallelo —')
+    .setIcon('plus').onClick(() => {
+      void createRelatedInlineDrawing(context, node, 'figlio');
+    }));
+  menu.addItem(item => item.setTitle('Nuovo ramo a L └')
+    .setIcon('corner-down-right').onClick(() => {
+      void createRelatedInlineDrawing(context, node, 'dettaglio');
+    }));
+  showAt(menu, position, context);
+}
+
+/** Native right-click and reliable touch long-press (> 550 ms) on a node.
+ * Normal taps and touches remain free for selecting the node.
+ */
+export function bindInlineNodeContextMenu(
+  element: HTMLElement, open: (position: { x: number; y: number }) => void
+): () => void {
+  let timer: number | null = null;
+  let origin: { x: number; y: number } | null = null;
+  let pointerId: number | null = null;
+  const cancel = (): void => {
+    if (timer !== null) window.clearTimeout(timer);
+    timer = null;
+    origin = null;
+    pointerId = null;
+  };
+  const contextmenu = (event: MouseEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    cancel();
+    open({ x: event.clientX, y: event.clientY });
+  };
+  const down = (event: PointerEvent): void => {
+    if (event.pointerType !== 'touch' || !event.isPrimary) return;
+    cancel();
+    pointerId = event.pointerId;
+    origin = { x: event.clientX, y: event.clientY };
+    timer = window.setTimeout(() => {
+      timer = null;
+      open({ x: origin?.x ?? event.clientX, y: origin?.y ?? event.clientY });
+      origin = null;
+    }, 550);
+  };
+  const move = (event: PointerEvent): void => {
+    if (event.pointerId !== pointerId || !origin) return;
+    if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > 12) cancel();
+  };
+  element.addEventListener('contextmenu', contextmenu);
+  element.addEventListener('pointerdown', down);
+  element.addEventListener('pointermove', move);
+  element.addEventListener('pointerup', cancel);
+  element.addEventListener('pointercancel', cancel);
+  element.addEventListener('pointerleave', cancel);
+  return () => {
+    cancel();
+    element.removeEventListener('contextmenu', contextmenu);
+    element.removeEventListener('pointerdown', down);
+    element.removeEventListener('pointermove', move);
+    element.removeEventListener('pointerup', cancel);
+    element.removeEventListener('pointercancel', cancel);
+    element.removeEventListener('pointerleave', cancel);
+  };
 }
 
 export function showInlineCreateMenu(context: InlineContext, nodes: OutlineNode[],
@@ -355,7 +475,26 @@ export function connectInlineHandwriting(
   };
   undo.addEventListener('click', () => run('undo'));
   redo.addEventListener('click', () => run('redo'));
-  const down = (e: PointerEvent) => { controller.pointerDown(e); };
+  // Touch taps select nodes; a stylus remains the primary in-place ink tool.
+  // Mouse clicks select by default. Opt into mouse drawing explicitly to avoid
+  // starting a stroke before the click or context-menu event can fire.
+  let mouseDrawing = false;
+  const mouseMode = toolbar.createEl('button', {
+    text: 'Disegna col mouse',
+    cls: 'mindmap-eome-mouse-ink-mode',
+    attr: { 'aria-pressed': 'false', 'aria-label': 'Attiva disegno diretto con mouse' }
+  });
+  mouseMode.addEventListener('click', () => {
+    mouseDrawing = !mouseDrawing;
+    mouseMode.setAttribute('aria-pressed', String(mouseDrawing));
+    mouseMode.setText(mouseDrawing ? 'Mouse: disegno' : 'Disegna col mouse');
+  });
+  const shouldInk = (e: PointerEvent): boolean =>
+    e.button === 0 && (e.pointerType === 'pen' ||
+      (e.pointerType === 'mouse' && (mouseDrawing || e.altKey)));
+  const down = (e: PointerEvent) => {
+    if (shouldInk(e)) controller.pointerDown(e);
+  };
   const move = (e: PointerEvent) => { controller.pointerMove(e); };
   const up = (e: PointerEvent) => { controller.pointerEnd(e); };
   wrapper.addEventListener('pointerdown', down, true);
@@ -395,7 +534,7 @@ export async function editInlineDrawing(context: InlineContext, roots: OutlineNo
   await context.plugin.app.vault.modify(file,
     createDrawingSvg(result.items, drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
   if (result.next) {
-    await addInlineDrawing(context, roots, node.line,
-      result.next === 'parallel' ? 'figlio' : 'dettaglio', 'none');
+    await createInlineDrawingSeries(context, node.line,
+      result.next === 'parallel' ? 'figlio' : 'dettaglio');
   }
 }

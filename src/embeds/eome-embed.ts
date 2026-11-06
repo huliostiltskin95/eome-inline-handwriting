@@ -28,7 +28,8 @@ import { normalizeRelations } from '../view/relations';
 import {
   addInlineDrawing, createFirstInlineDrawing,
   showInlineCreateMenu, showInlineArrowMenu,
-  editInlineDrawing, connectInlineHandwriting
+  editInlineDrawing, connectInlineHandwriting, showInlineNodeMenu,
+  bindInlineNodeContextMenu
 } from './inline-eome-actions';
 
 cytoscape.use(dagre);
@@ -467,6 +468,22 @@ export async function renderMindmapEomeEmbed(
       wrapper.querySelectorAll('.mindmap-eome-overlay').forEach(node =>
         node.classList.toggle('selected', node === overlay));
     });
+    // Restore standard Obsidian context interactions for handwritten nodes.
+    // Right click opens branches immediately; a 550 ms touch hold does the
+    // same on iPad/BOOX, without changing the drawing or its SVG.
+    const stopContext = bindInlineNodeContextMenu(wrapper, position => {
+      const element = wrapper.ownerDocument.elementFromPoint(position.x, position.y);
+      const overlay = element?.closest<HTMLElement>('.mindmap-eome-overlay[data-node-line]');
+      if (!overlay || !wrapper.contains(overlay)) return;
+      const line = Number(overlay.dataset.nodeLine);
+      const node = flat.find(item => item.line === line);
+      if (!node) return;
+      selectedLine = line;
+      wrapper.querySelectorAll('.mindmap-eome-overlay').forEach(element =>
+        element.classList.toggle('selected', element === overlay));
+      showInlineNodeMenu(inlineContext, roots, node, position);
+    });
+    child.register(stopContext);
     wrapper.addEventListener('dblclick', event => {
       const target = event.target instanceof Element ? event.target : null;
       const overlay = target?.closest<HTMLElement>('.mindmap-eome-overlay[data-node-line]');
