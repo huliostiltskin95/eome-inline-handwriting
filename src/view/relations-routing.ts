@@ -198,7 +198,16 @@ export function routeRelations(nodes: readonly RouteNode[], relations: readonly 
           [a, point((a.x + b.x) / 2, a.y), point((a.x + b.x) / 2, b.y), b])
         : [a, point(stem, a.y), point(stem, b.y), b];
     } else {
-      points = elbow(a, b, obstacles);
+      // A detail leaves the bottom of its source, descends, then turns
+      // once into the left side of the indented node below.
+      if ((relation.kind === 'dettaglio' || relation.kind === 'causa')
+        && target.y - target.h / 2 > source.y + source.h / 2) {
+        const start = point(source.x - source.w / 2 + 20, source.y + source.h / 2 + 7);
+        const end = point(target.x - target.w / 2 - 7, target.y);
+        points = [start, point(start.x, end.y), end];
+      } else {
+        points = elbow(a, b, obstacles);
+      }
     }
     points = points.filter((p, i) => i === 0 || !same(p, points[i - 1]));
     paths.push({ relation, geometry, points });

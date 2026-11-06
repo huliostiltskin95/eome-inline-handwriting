@@ -5,6 +5,7 @@ import { parseOutline, OutlineNode } from '../utils/outline';
 import { VerticalToolbar } from '../ui/toolbar/vertical-toolbar';
 import { MindmapView } from './mindmap-view';
 import { sortByMarkdownOrder } from '../utils/cytoscape';
+import { arrangeRelationNodes } from './relations-layout';
 import { arrangeTopLevelTrees } from './tree-layout';
 import { measureNodesForLayout } from './node-measurement';
 import { arrowModeForNode, arrowShapesForMode } from './edge-arrows';
@@ -251,6 +252,8 @@ function applyCompletedLayout(view: MindmapView, cy: Core): void {
     view.layoutOptions.headingTreeLayout ?? 'vertical',
     Math.max(160, (view.layoutOptions.rankSep ?? 50) * 3)
   );
+  if (view.file) arrangeRelationNodes(cy, view.sizeMap, view.relations,
+    node => relationNodeKey(view.app, view.file!, node));
   if (!view.firstFitDone) {
     cy.center(cy.elements());
     if (typeof view.layoutOptions.zoomFactor === 'number') {

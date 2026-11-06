@@ -14,6 +14,7 @@ import { isOutlineCompatible, OutlineNode, parseOutline } from '../utils/outline
 import { parseHeadingSections } from '../utils/heading-sections';
 import { sortByMarkdownOrder } from '../utils/cytoscape';
 import { renderHeadingFrames } from '../view/heading-frames';
+import { arrangeRelationNodes } from '../view/relations-layout';
 import { arrangeTopLevelTrees } from '../view/tree-layout';
 import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRelation } from '../view/relations';
 import { routeRelations, type RouteNode } from '../view/relations-routing';
@@ -447,6 +448,7 @@ export async function renderMindmapEomeEmbed(
 
   cy.on('layoutstop', () => {
     arrangeTopLevelTrees(cy, roots, sizeMap, 'vertical', 160);
+    arrangeRelationNodes(cy, sizeMap, relations, node => relationNodeKey(plugin.app, file, node));
     cy.fit(cy.elements(), 28);
     cy.center(cy.elements());
     const redraw = async (): Promise<void> => {
