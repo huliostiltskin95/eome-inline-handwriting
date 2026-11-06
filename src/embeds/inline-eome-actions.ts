@@ -1,6 +1,7 @@
 import { Menu, Notice, TFile, type MarkdownPostProcessorContext } from 'obsidian';
 import type MindmapPlugin from '../main';
-import type { OutlineNode } from '../utils/outline';
+import { parseOutline, type OutlineNode } from '../utils/outline';
+import { INLINE_MAPS_FIELD, inlineMapId, stampInlineMap } from './inline-eome-identity';
 import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from '../drawing/drawing-svg';
 import { extractDrawingLink } from '../drawing/drawing-link';
 import { PenPreferenceStore } from '../drawing/pen-preferences';
@@ -48,23 +49,53 @@ async function updateFence(context: InlineContext, next: string): Promise<void> 
   if (!replaced) throw new Error('Il blocco è cambiato o non è identificabile senza ambiguità.');
 }
 
-/** Each arrow belongs to its pair relation; do not overwrite other map
- * connections in the host note if another code block is being edited.
+/**
+ * One-time non-destructive migration from shared YAML relations. Only keys
+ * that uniquely identify a node inside this fence are migrated: ambiguous
+ * legacy labels are never guessed and remain untouched in the old field.
  */
-async function updatePairRelation(context: InlineContext, source: string, target: string,
-  kind: RelationKind, arrow: RelationArrowMode): Promise<void> {
+function migrateLegacy(context: InlineContext, stamped: string, legacy: EomeRelation[]): EomeRelation[] {
+  const flatten = (nodes: OutlineNode[]): OutlineNode[] =>
+    nodes.flatMap(node => [node, ...flatten(node.children)]);
+  const before = flatten(parseOutline(context.source));
+  const after = new Map(flatten(parseOutline(stamped)).map(node => [node.line, node]));
+  const keys = new Map<string, string[]>();
+  for (const node of before) {
+    const key = relationNodeKey(context.plugin.app, context.file, node);
+    const next = after.get(node.line);
+    if (!next) continue;
+    const entries = keys.get(key) ?? [];
+    entries.push(relationNodeKey(context.plugin.app, context.file, next));
+    keys.set(key, entries);
+  }
+  return legacy.flatMap(relation => {
+    const source = keys.get(relation.source), target = keys.get(relation.target);
+    return source?.length === 1 && target?.length === 1
+      ? [{ ...relation, source: source[0], target: target[0] }] : [];
+  });
+}
+
+async function modifyInlineRelations(context: InlineContext, stamped: string,
+  action: (relations: EomeRelation[]) => EomeRelation[]): Promise<void> {
+  const id = inlineMapId(stamped);
+  if (!id) throw new Error('Identificatore EOME mancante');
   await context.plugin.app.fileManager.processFrontMatter(context.file, frontmatter => {
-    const current = normalizeRelations(frontmatter[RELATIONS_FIELD]);
-    frontmatter[RELATIONS_FIELD] = createOrUpdateRelation(current, source, target, kind, arrow);
+    const maps = frontmatter[INLINE_MAPS_FIELD] && typeof frontmatter[INLINE_MAPS_FIELD] === 'object'
+      && !Array.isArray(frontmatter[INLINE_MAPS_FIELD])
+      ? frontmatter[INLINE_MAPS_FIELD] as Record<string, unknown> : {};
+    const old = Object.prototype.hasOwnProperty.call(maps, id)
+      ? normalizeRelations(maps[id])
+      : migrateLegacy(context, stamped, normalizeRelations(frontmatter[RELATIONS_FIELD]));
+    maps[id] = action(old);
+    frontmatter[INLINE_MAPS_FIELD] = maps;
   });
 }
 
 export async function changeInlineArrow(context: InlineContext, relation: EomeRelation,
   mode: RelationArrowMode): Promise<void> {
-  await context.plugin.app.fileManager.processFrontMatter(context.file, frontmatter => {
-    const current = normalizeRelations(frontmatter[RELATIONS_FIELD]);
-    frontmatter[RELATIONS_FIELD] = setRelationArrow(current, relation.id, mode);
-  });
+  const stamped = stampInlineMap(context.source).source;
+  if (stamped !== context.source) await updateFence(context, stamped);
+  await modifyInlineRelations(context, stamped, current => setRelationArrow(current, relation.id, mode));
 }
 
 export function showInlineArrowMenu(context: InlineContext, relation: EomeRelation,
@@ -100,18 +131,22 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
     const link = context.plugin.app.metadataCache.fileToLinktext(attachment, context.file.path, true);
     const embed = '![[ ' + link + ' ]]';
     const normalizedEmbed = embed.replace('![[ ', '![[').replace(' ]]', ']]');
-    const next = insertHandwrittenNode(context.source, line, normalizedEmbed);
-    if (next === null) throw new Error('Impossibile inserire il nodo in questo blocco.');
+    const base = stampInlineMap(context.source).source;
+    const inserted = insertHandwrittenNode(base, line, normalizedEmbed);
+    if (inserted === null) throw new Error('Impossibile inserire il nodo in questo blocco.');
+    const next = stampInlineMap(inserted).source;
+    const flatten = (values: OutlineNode[]): OutlineNode[] =>
+      values.flatMap(node => [node, ...flatten(node.children)]);
+    const updated = flatten(parseOutline(next));
+    const newNode = updated.find(node => extractDrawingLink(node.text)?.trim() === link.trim());
+    const previous = selected ? updated.find(node => node.line === selected.line) : null;
+    if (!newNode || (selected && !previous)) throw new Error('Identità del nodo non trovata.');
     await updateFence(context, next);
-    if (selected) {
-      await updatePairRelation(context,
-        relationNodeKey(context.plugin.app, context.file, selected),
-        'svg:' + link.trim(), kind, arrow);
-    } else {
-      await context.plugin.app.fileManager.processFrontMatter(context.file, frontmatter => {
-        if (!Array.isArray(frontmatter[RELATIONS_FIELD])) frontmatter[RELATIONS_FIELD] = [];
-      });
-    }
+    await modifyInlineRelations(context, next, existing =>
+      previous ? createOrUpdateRelation(existing,
+        relationNodeKey(context.plugin.app, context.file, previous),
+        relationNodeKey(context.plugin.app, context.file, newNode), kind, arrow) : existing);
+
   } catch (error) {
     console.error('Inline EOME node creation failed', error);
     new Notice(attachment
