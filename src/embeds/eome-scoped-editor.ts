@@ -52,8 +52,13 @@ export class EomeScopedEditor extends Modal {
   private locate(markdown: string): InlineEomeFence | null {
     if (this.id) return findInlineFenceById(markdown, this.id);
     const atLine = findInlineFenceAtLine(markdown, this.line);
-    if (atLine && atLine.content.replace(/\r\n/g, '\n').trim() ===
-        this.source.replace(/\r\n/g, '\n').trim()) return atLine;
+    if (atLine && atLine.open === this.line) {
+      if (atLine.content.replace(/\r\n/g, '\n').trim() === this.source.replace(/\r\n/g, '\n').trim())
+        return atLine;
+      // First edit stamps the fence ID and potentially inserts a new SVG.
+      // Do not lose the active map before its ID has been cached.
+      if (!this.id && inlineMapId(atLine.content)) return atLine;
+    }
     return findInlineFenceByContent(markdown, this.source);
   }
 
@@ -93,10 +98,7 @@ export class EomeScopedEditor extends Modal {
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
     if (this.modifyRef) this.plugin.app.vault.offref(this.modifyRef);
     this.modifyRef = null;
-    for (const child of this.children) {
-      this.removeChild(child);
-      child.unload();
-    }
+    for (const child of this.children) child.unload();
     this.children = [];
     this.contentEl.empty();
   }
