@@ -9,7 +9,28 @@ export function isInlineMindmapSource(source: string): boolean {
     || /^(?:[-*+]\s+|\d+\.\s+)/m.test(body);
 }
 
-interface Fence { open: number; close: number; content: string; prefix: string }
+export interface InlineEomeFence { open: number; close: number; content: string; prefix: string }
+type Fence = InlineEomeFence;
+
+/** Locate exactly one fenced EOME map. This never scans frontmatter or
+ * ordinary list content as though it were the selected map.
+ */
+export function findInlineFenceAtLine(markdown: string, line: number): InlineEomeFence | null {
+  return fences(markdown).find(fence => line >= fence.open && line <= fence.close) ?? null;
+}
+
+export function findInlineFenceById(markdown: string, id: string): InlineEomeFence | null {
+  const matches = fences(markdown).filter(fence =>
+    fence.content.split(/\\r?\\n/).some(line => line.trim() === '<!-- eome-map-id: ' + id + ' -->'));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function findInlineFenceByContent(markdown: string, content: string): InlineEomeFence | null {
+  const normalized = (value: string): string => value.replace(/\\r\\n/g, '\\n').trim();
+  const matches = fences(markdown).filter(fence => normalized(fence.content) === normalized(content));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function fences(markdown: string): Fence[] {
   const lines = markdown.split(/\r?\n/);
   const result: Fence[] = [];
