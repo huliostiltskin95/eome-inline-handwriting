@@ -42,6 +42,9 @@ export class InlineInkController {
   private refreshTimer: number | null = null;
   private readonly compactTimers = new Map<string, number>();
   private readonly redoItems = new Map<string, ExportedDrawingItem>();
+  private eraserEnabled = false;
+  public setEraserEnabled(enabled: boolean): void { this.eraserEnabled = enabled; }
+  public isEraserEnabled(): boolean { return this.eraserEnabled; }
 
   constructor(private readonly view: MindmapView, private readonly wrapper: HTMLElement) {}
 
@@ -66,6 +69,13 @@ export class InlineInkController {
     if (rect.width < 1 || rect.height < 1 ||
         event.clientX < rect.left || event.clientX > rect.right ||
         event.clientY < rect.top || event.clientY > rect.bottom) return false;
+
+    if (this.eraserEnabled) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void this.enqueueErase(file, rect, event.clientX, event.clientY);
+      return true;
+    }
 
     // Avoid changing the SVG viewBox during a burst of handwritten strokes.
     const compactTimer = this.compactTimers.get(file.path);
@@ -195,6 +205,59 @@ export class InlineInkController {
     };
     const last = session.points[session.points.length - 1];
     if (!last || Math.hypot(last.x - next.x, last.y - next.y) > 0.0005) session.points.push(next);
+  }
+
+  /** Vector eraser: remove the nearest *complete pen stroke*, never rasterize
+   * or flatten other geometry. Pencil or mouse taps work inside a node SVG.
+   */
+  private async enqueueErase(attachment: TFile, rect: DOMRect, clientX: number, clientY: number): Promise<void> {
+    const key = attachment.path;
+    const prior = this.queues.get(key) ?? Promise.resolve();
+    const current = prior.catch(() => {}).then(async () => {
+      const before = await this.view.app.vault.read(attachment);
+      const drawing = parseDrawingSvg(before);
+      const bounds = getViewBox(before);
+      if (!drawing || !bounds) return;
+      const [x, y, w, h] = bounds;
+      const px = x + clamp((clientX - rect.left) / rect.width, 0, 1) * w;
+      const py = y + clamp((clientY - rect.top) / rect.height, 0, 1) * h;
+      const tolerance = Math.max(w / rect.width, h / rect.height) * 12;
+      const segmentDistance = (a: InkPoint, b: InkPoint): number => {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const factor = dx * dx + dy * dy;
+        const t = factor ? clamp(((px - a.x) * dx + (py - a.y) * dy) / factor, 0, 1) : 0;
+        return Math.hypot(px - (a.x + dx * t), py - (a.y + dy * t));
+      };
+      let nearest = -1, distance = tolerance;
+      drawing.items.forEach((item, index) => {
+        if (item.type !== 'pen' || !Array.isArray(item.data.path)) return;
+        const path = item.data.path as InkPoint[];
+        if (!path.length) return;
+        let score = Math.hypot(px - path[0].x, py - path[0].y);
+        for (let i = 1; i < path.length; i++)
+          score = Math.min(score, segmentDistance(path[i - 1], path[i]));
+        if (score < distance) { distance = score; nearest = index; }
+      });
+      if (nearest < 0) return;
+      const items = drawing.items.filter((_, index) => index !== nearest);
+      if (await this.view.app.vault.read(attachment) !== before)
+        throw new Error('Concurrent SVG edit; erasure cancelled.');
+      await this.view.app.vault.modify(attachment,
+        createDrawingSvg(items, drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
+      this.redoItems.delete(key);
+      this.view.attachmentVersions.markCurrent(attachment);
+    });
+    this.queues.set(key, current);
+    try {
+      await current;
+      this.scheduleRefresh();
+      this.scheduleCompaction(attachment);
+    } catch (error) {
+      console.error('Inline vector eraser failed:', error);
+      new Notice('Non è stato possibile cancellare il tratto.');
+    } finally {
+      if (this.queues.get(key) === current) this.queues.delete(key);
+    }
   }
 
   private async enqueueSave(session: InkSession): Promise<void> {
