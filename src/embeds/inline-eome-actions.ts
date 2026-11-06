@@ -228,6 +228,13 @@ export function connectInlineHandwriting(
   });
   const parallel = toolbar.createEl('button', { text: '—+', attr: { 'aria-label': 'Crea nodo parallelo' } });
   const detail = toolbar.createEl('button', { text: '└+', attr: { 'aria-label': 'Crea dettaglio sotto il nodo' } });
+  // The advanced whiteboard editor was still implemented, but the compact
+  // pen toolbar no longer exposed it. Restore an explicit touch-sized action.
+  const advanced = toolbar.createEl('button', {
+    text: 'Modifica nodo',
+    cls: 'mindmap-eome-advanced-editor',
+    attr: { 'aria-label': 'Apri editor avanzato del nodo selezionato' }
+  });
 
   const selectedLine = (): number | null => {
     const selected = wrapper.querySelector<HTMLElement>('.mindmap-eome-overlay.selected[data-node-line]');
@@ -235,6 +242,19 @@ export function connectInlineHandwriting(
     const line = Number(selected.dataset.nodeLine);
     return Number.isFinite(line) ? line : null;
   };
+  const editSelected = (): void => {
+    const line = selectedLine();
+    const node = line === null ? null : flat.find(item => item.line === line);
+    if (!node) {
+      new Notice('Seleziona prima il nodo manoscritto da modificare.');
+      return;
+    }
+    void editInlineDrawing(context, parseOutline(context.source), node).catch(error => {
+      console.error('EOME advanced node editor failed', error);
+      new Notice('Non è stato possibile aprire l’editor avanzato del nodo.');
+    });
+  };
+  advanced.addEventListener('click', editSelected);
   const pending = pendingFocus.get(focusKey(context.file, context.source));
   if (pending) {
     const node = flat.find(item => extractDrawingLink(item.text)?.trim() === pending.link);
