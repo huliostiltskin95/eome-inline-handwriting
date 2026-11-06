@@ -1,9 +1,11 @@
 import {
-  ItemView, MarkdownRenderChild, TFile, type MarkdownPostProcessorContext,
+  ItemView, MarkdownRenderChild, TFile, Notice, type MarkdownPostProcessorContext,
   type WorkspaceLeaf, type ViewStateResult
 } from 'obsidian';
 import type MindmapPlugin from '../main';
-import { inlineMapId } from './inline-eome-identity';
+import { inlineMapId, outlineWithoutMapMarker } from './inline-eome-identity';
+import { parseOutline } from '../utils/outline';
+import { createFirstInlineDrawing } from './inline-eome-actions';
 import {
   findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById,
   type InlineEomeFence
@@ -26,6 +28,8 @@ interface ScopedViewState {
  */
 export class EomeScopedEditor extends ItemView {
   private host: HTMLElement | null = null;
+  private firstNodeButton: HTMLButtonElement | null = null;
+  private creatingFirstNode = false;
   private children: MarkdownRenderChild[] = [];
   private refreshTimer: number | null = null;
   private renderGeneration = 0;
@@ -70,9 +74,22 @@ export class EomeScopedEditor extends ItemView {
     this.closed = false;
     this.contentEl.empty();
     this.contentEl.addClass('eome-scoped-tab');
-    this.contentEl.createDiv({
+    const toolbar = this.contentEl.createDiv({ cls: 'eome-scoped-main-toolbar' });
+    this.firstNodeButton = toolbar.createEl('button', {
+      cls: 'mod-cta eome-create-first-node',
+      text: '+ Crea il primo nodo',
+      attr: { 'aria-label': 'Crea il primo nodo nell’editor avanzato' }
+    });
+    this.firstNodeButton.addEventListener('click', () => {
+      void this.createFirstNode().catch(error => {
+        console.error('EOME first node toolbar failed:', error);
+        new Notice('Impossibile aprire il primo nodo: ' +
+          (error instanceof Error ? error.message : String(error)));
+      });
+    });
+    toolbar.createDiv({
       cls: 'eome-scoped-instructions',
-      text: 'Seleziona un nodo per scrivere con la penna, usa Modifica nodo per l’editor avanzato, —+ per il ramo parallelo o └+ per il dettaglio.'
+      text: 'Primo nodo: editor avanzato obbligatorio. Per i successivi, seleziona un nodo e usa —+ oppure └+.'
     });
     this.host = this.contentEl.createDiv({ cls: 'eome-scoped-editor-host' });
     this.registerEvent(this.app.vault.on('modify', changed => {
@@ -82,6 +99,36 @@ export class EomeScopedEditor extends ItemView {
       }
     }));
     if (this.file) await this.refresh();
+  }
+
+  private async createFirstNode(): Promise<void> {
+    if (this.creatingFirstNode || this.closed || !this.file || !this.host) return;
+    const current = this.locate(await this.app.vault.read(this.file));
+    if (!current || parseOutline(outlineWithoutMapMarker(current.content)).length > 0) {
+      new Notice('La mappa non è vuota o non è più identificabile.');
+      return;
+    }
+    this.creatingFirstNode = true;
+    if (this.firstNodeButton) this.firstNodeButton.disabled = true;
+    const file = this.file;
+    const context = {
+      sourcePath: file.path,
+      getSectionInfo: () => ({ lineStart: current.open, lineEnd: current.close }),
+      onInlineEomeSaved: (next: string) => {
+        this.source = next;
+        this.mapId = inlineMapId(next);
+      }
+    } as unknown as MarkdownPostProcessorContext;
+    try {
+      await createFirstInlineDrawing({
+        plugin: this.plugin, file, source: current.content,
+        container: this.host, ctx: context
+      });
+    } finally {
+      this.creatingFirstNode = false;
+      if (this.firstNodeButton) this.firstNodeButton.disabled = false;
+      if (!this.closed) this.scheduleRefresh(50);
+    }
   }
 
   private scheduleRefresh(delay: number): void {
@@ -127,6 +174,11 @@ export class EomeScopedEditor extends ItemView {
     this.source = fence.content;
     this.mapId = inlineMapId(fence.content);
     this.line = fence.open;
+    if (this.firstNodeButton) {
+      this.firstNodeButton.hidden =
+        parseOutline(outlineWithoutMapMarker(fence.content)).length > 0;
+      this.firstNodeButton.disabled = this.creatingFirstNode;
+    }
     this.unloadRenderedChildren();
     this.host.empty();
     const target = this.host.createDiv();
@@ -171,6 +223,7 @@ export class EomeScopedEditor extends ItemView {
     this.unloadRenderedChildren();
     this.contentEl.empty();
     this.host = null;
+    this.firstNodeButton = null;
     // The source Markdown preview stays in its own tab, like a PDF embed.
     // A rerender accounts for SVG-only modifications without changing prose.
     for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
