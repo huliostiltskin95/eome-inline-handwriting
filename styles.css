@@ -2616,3 +2616,13 @@ body.is-mobile .eome-drawing-footer button,
   .eome-scoped-tab .eome-tab-diagram,
   .eome-scoped-tab .eome-tab-diagram > .mindmap-eome-wrapper { min-height: 100%; }
 }
+
+/* The only global controls are viewing mode and save/close. New-map creation
+   lives in the lower editing pane, where it remains available on e-ink. */
+.eome-scoped-tab .eome-scoped-lower-pane > .eome-create-first-node {
+  margin: 8px 16px;
+  min-height: 44px;
+  border: 2px solid var(--text-normal);
+}
+.eome-scoped-tab .eome-scoped-lower-pane > .eome-create-first-node[hidden],
+.eome-scoped-tab.eome-scoped-readonly .mindmap-eome-empty button { display: none; }
