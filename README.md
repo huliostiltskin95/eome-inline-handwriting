@@ -13,6 +13,18 @@ Questa versione aggiunge **scrittura a mano direttamente nei nodi della mappa**,
 
 Il plugin ha un **ID diverso dall'originale**, quindi non ne sovrascrive i file. Per evitare che entrambi cerchino di gestire le stesse note, si consiglia di **disattivare il plugin EOME originale durante le prove**.
 
+## 0.4.1 — Schede Obsidian e modifica avanzata dei nodi
+
+Le mappe `mindmap-eome` si aprono in una **scheda standard di Obsidian**, separata dalla nota Markdown, e non in una finestra modale. La scheda può essere affiancata o chiusa come qualsiasi altro pannello. Il contenuto modificabile resta sempre il singolo blocco selezionato: gli altri blocchi e la frontmatter della nota sono preservati.
+
+- **Creare una mappa:** esegui il comando **EOME: inserisci nuovo blocco mappa** tramite la palette comandi (o il menu Slash Commands quando disponibile). Viene aggiunto un blocco Markdown vuoto `mindmap-eome` e il cursore viene posizionato al suo interno.
+- **Aprire la mappa:** posiziona il cursore nel blocco ed esegui **EOME: apri la mappa del blocco al cursore**, oppure premi il pulsante di espansione dell'anteprima. EOME apre una nuova scheda.
+- **Scrittura rapida:** seleziona un nodo SVG e scrivi con penna o mouse; `—+` crea un parallelo e `└+` un dettaglio a L.
+- **Editor avanzato:** seleziona un nodo e premi **Modifica nodo** nella barra degli strumenti. L'editor vettoriale completo consente di correggere e organizzare i tratti; è ancora accessibile con doppio clic sul nodo.
+- **Ritorno alla nota:** chiudi la scheda EOME. Gli SVG e i collegamenti sono già salvati; la nota mantiene il blocco e mostra la mappa aggiornata.
+
+**Nota sullo slash:** il menu slash è una funzione di Obsidian/di eventuali plugin di comandi. Il comando EOME è registrato nel sistema comandi ed è sempre richiamabile tramite palette; l'elenco `/` può essere limitato all'editor o non funzionare dentro un blocco di codice.
+
 ## Specifica tecnica dei collegamenti
 
 Il sistema di relazioni e routing della versione 0.2.8 è **provvisorio**. Le nuove regole richieste sono: **figlio/conseguenza = linea orizzontale**; **dettaglio/causa = L ortogonale**; frecce personalizzabili su **ogni singola relazione**, indipendentemente dal tipo. Le relazioni sono stabilite **tra coppie esplicite di nodi**, non dedotte dalla loro posizione o dall'ordine dell'outline. Le linee possono condividere dorsali dove questo migliora la leggibilità.
