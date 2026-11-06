@@ -79,8 +79,10 @@ export async function draw(view: MindmapView, request: DrawRequest): Promise<voi
             'taxi-turn': '50%',
             'taxi-turn-min-distance': '8px',
             'line-cap': 'round',
-            'source-arrow-shape': 'data(sourceArrow)',
-            'target-arrow-shape': 'data(targetArrow)',
+            // The Cytoscape runtime accepts data() for arrow shapes; the
+            // installed TypeScript declarations type these as static literals.
+            'source-arrow-shape': 'data(sourceArrow)' as any,
+            'target-arrow-shape': 'data(targetArrow)' as any,
             'source-arrow-color': '#666666',
             'target-arrow-color': '#666666',
             'arrow-scale': 0.65,
