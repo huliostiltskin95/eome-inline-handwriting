@@ -25,6 +25,16 @@ Le mappe `mindmap-eome` si aprono in una **scheda standard di Obsidian**, separa
 
 **Nota sullo slash:** il menu slash è una funzione di Obsidian/di eventuali plugin di comandi. Il comando EOME è registrato nel sistema comandi ed è sempre richiamabile tramite palette; l'elenco `/` può essere limitato all'editor o non funzionare dentro un blocco di codice.
 
+## 0.4.5 — Selezione dei nodi, menu contestuale e inserimento in serie
+
+Nella scheda EOME:
+- **Clic del mouse o tocco breve:** seleziona un nodo manoscritto; il bordo evidenziato indica quale parola chiave è attiva. Il doppio clic apre direttamente l'editor avanzato.
+- **Clic destro / pressione prolungata su touchscreen:** apre il menu del nodo, con **Modifica nodo**, **Nuovo parallelo** e **Nuovo ramo a L**. Le voci per i nuovi rami aprono subito l'editor avanzato.
+- **Penna:** continua a scrivere direttamente sugli SVG nella mappa. Per evitare che un normale clic sul Mac diventi un tratto, la scrittura diretta con mouse richiede il pulsante **Disegna col mouse** (oppure Alt mentre si trascina).
+- **Editor avanzato, «Salva + parallelo» e «Salva + L»:** salva il nodo corrente e apre **subito** il foglio del nodo collegato, senza passare dalla mappa. Anche il nuovo foglio può usare «Salva + …» per proseguire in serie. Premendo **Salva** senza collegamenti si torna alla mappa; annullare il foglio successivo non crea un SVG vuoto.
+
+Le operazioni funzionano sia sulla mappa ordinaria sia sulla visualizzazione alternativa degli SVG, prevista quando il renderer grafico non è disponibile.
+
 ## Specifica tecnica dei collegamenti
 
 Il sistema di relazioni e routing della versione 0.2.8 è **provvisorio**. Le nuove regole richieste sono: **figlio/conseguenza = linea orizzontale**; **dettaglio/causa = L ortogonale**; frecce personalizzabili su **ogni singola relazione**, indipendentemente dal tipo. Le relazioni sono stabilite **tra coppie esplicite di nodi**, non dedotte dalla loro posizione o dall'ordine dell'outline. Le linee possono condividere dorsali dove questo migliora la leggibilità.
