@@ -53,6 +53,12 @@ async function updateFence(context: InlineContext, next: string): Promise<void> 
     return updated;
   });
   if (!replaced) throw new Error('Il blocco è cambiato o non è identificabile senza ambiguità.');
+  // The owning modal must learn a newly stamped map ID before frontmatter
+  // writes shift the fence's original line number.
+  const scoped = context.ctx as MarkdownPostProcessorContext & {
+    onInlineEomeSaved?: (newSource: string) => void;
+  };
+  scoped.onInlineEomeSaved?.(next);
 }
 
 /**
