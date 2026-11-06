@@ -240,7 +240,12 @@ export function showInlineCreateMenu(context: InlineContext, nodes: OutlineNode[
     return;
   }
   if (selected === null) {
-    void addInlineDrawing(context, nodes, null, 'figlio', 'none');
+    // Every entry point for the initial root must use the complete editor.
+    void createFirstInlineDrawing(context).catch(error => {
+      console.error('EOME first node menu failed', error);
+      new Notice('Impossibile aprire l’editor del primo nodo: ' +
+        (error instanceof Error ? error.message : String(error)));
+    });
     return;
   }
   const geometryMenu = new Menu();
