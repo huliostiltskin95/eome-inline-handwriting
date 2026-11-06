@@ -1,6 +1,6 @@
 {
   "name": "eome-inline-handwriting",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "description": "A visual drag-n-drop mindmap editor (with markdown outline under the hood).",
   "main": "main.js",
   "scripts": {
