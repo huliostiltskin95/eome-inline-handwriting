@@ -101,6 +101,15 @@ export class EomeScopedEditor extends Modal {
     for (const child of this.children) child.unload();
     this.children = [];
     this.contentEl.empty();
+    // The Markdown file owns the preview. Ask any visible reading-mode leaf
+    // to refresh its code blocks, including after SVG-only edits.
+    for (const leaf of this.plugin.app.workspace.getLeavesOfType('markdown')) {
+      const view = leaf.view as unknown as {
+        file?: TFile;
+        previewMode?: { rerender?: (force?: boolean) => void };
+      };
+      if (view.file?.path === this.file.path) view.previewMode?.rerender?.(true);
+    }
   }
 }
 
