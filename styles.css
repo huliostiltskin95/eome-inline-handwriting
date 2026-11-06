@@ -2457,3 +2457,33 @@ body.is-mobile .eome-drawing-footer button,
 .eome-scoped-tab .eome-tab-fallback-actions button {
   min-height: 40px;
 }
+
+/* EOME 0.4.5: visible selected-node state and touch/trackpad actions.
+   Default mouse/touch interaction selects; stylus remains direct ink. */
+.eome-scoped-tab .eome-tab-fallback-node {
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.eome-scoped-tab .eome-tab-fallback-node.selected,
+.eome-scoped-tab .eome-tab-fallback-node:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+  border-color: var(--interactive-accent);
+}
+.eome-scoped-tab .eome-tab-fallback-node.selected .eome-tab-fallback-actions {
+  opacity: 1;
+}
+.eome-scoped-tab .eome-tab-fallback-node img {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.eome-scoped-tab .mindmap-eome-ink-tools .mindmap-eome-mouse-ink-mode {
+  min-width: 120px;
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
+}
+.eome-scoped-tab .mindmap-eome-ink-tools .mindmap-eome-mouse-ink-mode[aria-pressed="true"] {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
