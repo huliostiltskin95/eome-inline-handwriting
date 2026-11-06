@@ -3,7 +3,7 @@
 import { setIcon } from 'obsidian';
 import type { MindmapView } from '../../view/mindmap-view';
 import { addBlankDrawingAsRoot } from '../../drawing/drawing-actions';
-import { showNewNodeMenu } from './handwritten-node-menu';
+import { showNewNodeMenu } from '../menus/handwritten-node-menu';
 import { Notice } from 'obsidian';
 import { LayoutOptionsMenu } from '../menus/layout-options-menu';
 import { NodeOptionsMenu, NodeOptions } from '../menus/node-options-menu';

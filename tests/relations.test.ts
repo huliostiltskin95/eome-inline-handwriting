@@ -19,6 +19,13 @@ describe('explicit semantic relation model', () => {
     expect(relationGeometry('causa')).toBe('elbow');
   });
 
+  it('stores chosen initial arrow in the same relation transaction', () => {
+    const first = createOrUpdateRelation([], 'svg:a.svg', 'svg:b.svg', 'figlio', 'end');
+    expect(first[0]).toMatchObject({ kind: 'figlio', arrow: 'end' });
+    const changed = createOrUpdateRelation(first, 'svg:a.svg', 'svg:b.svg', 'dettaglio', 'start');
+    expect(changed[0]).toMatchObject({ id: first[0].id, kind: 'dettaglio', arrow: 'start' });
+  });
+
   it('preserves explicit pair IDs when changing semantic kind', () => {
     const first = createOrUpdateRelation([], 'svg:a.svg', 'svg:b.svg', 'figlio');
     const second = createOrUpdateRelation(first, 'svg:a.svg', 'svg:b.svg', 'causa');

@@ -159,7 +159,8 @@ export class MindmapView extends TextFileView {
     await this.saveRelationChanges(this.relations);
   }
 
-  public async addRelation(source: OutlineNode, target: OutlineNode, kind: RelationKind): Promise<void> {
+  public async addRelation(source: OutlineNode, target: OutlineNode, kind: RelationKind,
+    arrow: RelationArrowMode = 'none'): Promise<void> {
     const file = this.file;
     if (!file) return;
     const nodes = this.getFlatNodes();
@@ -175,7 +176,7 @@ export class MindmapView extends TextFileView {
     if (!this.explicitRelationMode && nodes.length > 2) {
       new Notice('La mappa passa ai collegamenti espliciti. Le vecchie linee restano nei dati, ma non verranno interpretate.');
     }
-    await this.saveRelationChanges(createOrUpdateRelation(this.relations, a, b, kind));
+    await this.saveRelationChanges(createOrUpdateRelation(this.relations, a, b, kind, arrow));
   }
 
   public async changeRelationKind(id: string, kind: RelationKind): Promise<void> {
