@@ -46,7 +46,9 @@ export class InlineInkController {
   pointerDown(event: PointerEvent): boolean {
     if (!this.view.inlineInkEnabled || event.pointerType !== 'pen' || event.button !== 0 || this.session) return false;
     const target = event.target instanceof Element ? event.target : null;
-    if (!target || target.closest('button, a, input, textarea, [contenteditable="true"]')) return false;
+    // Embedded SVGs may be wrapped by an Obsidian anchor. Restrict drawing by
+    // the SVG image rectangle below, rather than rejecting all ancestor links.
+    if (!target || target.closest('button, input, textarea, [contenteditable="true"]')) return false;
     const overlay = target.closest<HTMLElement>('.mindmap-overlay[data-node-line]');
     if (!overlay || !this.wrapper.contains(overlay) || !this.view.file) return false;
     const node = this.view.getNodeByLine(Number(overlay.dataset.nodeLine));

@@ -9,7 +9,11 @@ import {
 import { VIEW_TYPE_MINDMAP } from './constants';
 import { addToggleMindmapMenuItem } from './integration/context-menu';
 import { MindmapView } from './view/mindmap-view';
-import { addBlankDrawingAsChild } from './drawing/drawing-actions';
+import {
+  addBlankDrawingAsChild,
+  addBlankDrawingAsSibling,
+  addBlankDrawingAsRoot
+} from './drawing/drawing-actions';
 import { openInternalLink } from './utils/outline';
 import { renderMindmapEomeEmbed } from './embeds/eome-embed';
 import { exportMindmapViewToCanvas } from './commands/export-canvas';
@@ -56,14 +60,29 @@ export default class MindmapPlugin extends Plugin {
     });
     this.addCommand({
       id: 'add-handwritten-child-node',
-      name: 'Add a blank handwritten child node',
+      name: 'Add a handwritten child node (or first root)',
       checkCallback: (checking) => {
         const view = this.getActiveMindmapView();
         const node = view?.getSelectedNodes()[0];
-        if (checking) return Boolean(node);
+        const canRun = Boolean(view && (node || view.getFlatNodes().length === 0));
+        if (checking) return canRun;
+        if (!view) return false;
+        if (!view.inlineInkEnabled) view.toggleInlineInk();
+        if (node) void addBlankDrawingAsChild(view, node);
+        else if (canRun) void addBlankDrawingAsRoot(view);
+        return canRun;
+      }
+    });
+    this.addCommand({
+      id: 'add-handwritten-sibling-node',
+      name: 'Add a handwritten sibling node',
+      checkCallback: (checking) => {
+        const view = this.getActiveMindmapView();
+        const node = view?.getSelectedNodes()[0];
+        if (checking) return Boolean(view && node);
         if (!view || !node) return false;
         if (!view.inlineInkEnabled) view.toggleInlineInk();
-        void addBlankDrawingAsChild(view, node);
+        void addBlankDrawingAsSibling(view, node);
         return true;
       }
     });

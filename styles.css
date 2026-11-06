@@ -2005,3 +2005,54 @@ body.is-mobile .eome-drawing-footer button,
 .mindmap-wrapper.is-inline-ink-enabled .mindmap-overlay:has(.markdown-rendered img) {
   outline: 1px dashed var(--interactive-accent);
 }
+
+/* Pen-first mindmap controls: the expand button is always reachable with a
+   finger or Pencil and remains outside the handwriting area. */
+.mindmap-wrapper .eome-node-expand {
+  position: absolute;
+  right: 36px;
+  top: -16px;
+  z-index: 25;
+  display: none;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.mindmap-wrapper .mindmap-overlay.hovering .eome-node-expand,
+.mindmap-wrapper .mindmap-overlay.selected .eome-node-expand,
+.mindmap-wrapper.is-touch-device .eome-node-expand {
+  display: inline-flex;
+}
+.mindmap-wrapper.is-touch-device .eome-node-expand {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+}
+.eome-drawing-footer .eome-drawing-followup {
+  border: 1px solid var(--background-modifier-border);
+  white-space: nowrap;
+}
+@media (max-width: 620px) {
+  .eome-drawing-footer {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 6px;
+  }
+  .eome-drawing-status {
+    flex: 1 0 100%;
+  }
+  .eome-drawing-footer .eome-drawing-followup {
+    flex: 1 1 auto;
+  }
+}

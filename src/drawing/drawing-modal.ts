@@ -10,16 +10,18 @@ import { canonicalizeDrawing } from './drawing-changes';
 
 export interface DrawingModalResult {
   items: ExportedDrawingItem[];
+  next?: 'child' | 'sibling';
 }
 
 export function openDrawingModal(
   app: App,
   initialItems: ExportedDrawingItem[] = [],
   registerCloser?: (close: () => void) => () => void,
-  penPreferences?: PenPreferenceStore
+  penPreferences?: PenPreferenceStore,
+  allowRelatedNodes = false
 ): Promise<DrawingModalResult | null> {
   return new Promise((resolve) => {
-    const modal = new DrawingModal(app, initialItems, resolve, penPreferences);
+    const modal = new DrawingModal(app, initialItems, resolve, penPreferences, allowRelatedNodes);
     // The lifecycle closer fires when the mindmap view itself goes away, and
     // it must not stop to ask anything: there is nobody left to answer, and
     // the editor cannot outlive the view it belongs to.
@@ -85,7 +87,8 @@ class DrawingModal extends Modal {
     app: App,
     private readonly initialItems: ExportedDrawingItem[],
     private readonly resolveResult: (result: DrawingModalResult | null) => void,
-    private readonly penPreferences?: PenPreferenceStore
+    private readonly penPreferences?: PenPreferenceStore,
+    private readonly allowRelatedNodes = false
   ) {
     super(app);
   }
@@ -131,6 +134,27 @@ class DrawingModal extends Modal {
     const saveButton = footer.createEl('button', { text: 'Save', cls: 'mod-cta' });
     saveButton.disabled = true;
 
+    // The follow-up actions are meaningful only for an existing drawing node.
+    // Each action first saves the current SVG; the caller then inserts a linked
+    // handwritten node and immediately opens its full-size editor.
+    const nextButtons: HTMLButtonElement[] = [];
+    if (this.allowRelatedNodes) {
+      const addChildButton = footer.createEl('button', {
+        text: 'Salva + figlio',
+        cls: 'eome-drawing-followup'
+      });
+      const addSiblingButton = footer.createEl('button', {
+        text: 'Salva + fratello',
+        cls: 'eome-drawing-followup'
+      });
+      for (const button of [addChildButton, addSiblingButton]) {
+        button.disabled = true;
+        nextButtons.push(button);
+      }
+      addChildButton.addEventListener('click', () => this.commitSave('child'));
+      addSiblingButton.addEventListener('click', () => this.commitSave('sibling'));
+    }
+
     this.statusEl = status;
     this.saveButton = saveButton;
     cancelButton.addEventListener('click', () => this.close());
@@ -140,6 +164,7 @@ class DrawingModal extends Modal {
       if (this.isClosed) return;
       status.setText('Pencil pressure, palm rejection, pinch zoom and hold-to-straighten are active.');
       saveButton.disabled = false;
+      for (const button of nextButtons) button.disabled = false;
       undoButton.disabled = false;
       redoButton.disabled = false;
     }).catch((error: unknown) => {
@@ -214,7 +239,7 @@ class DrawingModal extends Modal {
     }
   }
 
-  private commitSave(): void {
+  private commitSave(next?: 'child' | 'sibling'): void {
     if (!this.board || this.settled) return;
 
     let items: ExportedDrawingItem[];
@@ -229,7 +254,7 @@ class DrawingModal extends Modal {
 
     if (this.saveButton) this.saveButton.disabled = true;
     this.settled = true;
-    this.resolveResult({ items });
+    this.resolveResult({ items, next });
     this.close();
   }
 

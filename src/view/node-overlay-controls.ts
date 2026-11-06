@@ -3,6 +3,12 @@ import type { OutlineNode } from '../utils/outline';
 import type { MindmapView } from './mindmap-view';
 import { DeleteNodeModal, DeleteOption } from '../ui/modals/delete-node-modal';
 import { getPrimaryZoteroLink } from '../utils/zotero';
+import { extractDrawingLink } from '../drawing/drawing-link';
+import {
+  addBlankDrawingAsChild,
+  addBlankDrawingAsSibling,
+  editDrawing
+} from '../drawing/drawing-actions';
 
 export interface CheckboxOverlayControl {
   checkboxToggle: HTMLButtonElement;
@@ -103,11 +109,29 @@ export function appendNodeControls(box: HTMLElement, node: OutlineNode, view: Mi
   // createControlButton already appends to `controls`; appending the return
   // values again would add each button twice.
   createControlButton('plus', 'Add child', () => {
-    void view.executeAddChildCommand(node);
+    if (view.inlineInkEnabled) void addBlankDrawingAsChild(view, node);
+    else void view.executeAddChildCommand(node);
   });
   createControlButton('git-pull-request-create', 'Add sibling', () => {
-    void view.executeAddSiblingCommand(node);
+    if (view.inlineInkEnabled) void addBlankDrawingAsSibling(view, node);
+    else void view.executeAddSiblingCommand(node);
   });
+
+  // Always-visible touch target on drawing nodes: no double-tap and no text
+  // keyboard needed to expand the handwriting editor on iPad.
+  if (extractDrawingLink(node.text)) {
+    const expand = box.createEl('button', { cls: 'eome-node-expand' });
+    expand.type = 'button';
+    expand.setAttribute('aria-label', 'Espandi il nodo manoscritto');
+    expand.setAttribute('title', 'Apri editor manoscritto grande');
+    setIcon(expand, 'maximize-2');
+    expand.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!view.file) return;
+      void editDrawing(view, node);
+    });
+  }
 
   deleteButton.addEventListener('click', (event) => {
     event.stopPropagation();

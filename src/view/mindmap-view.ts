@@ -95,11 +95,14 @@ export class MindmapView extends TextFileView {
   public commandHistory: CommandHistory;
   public selectedNodeLines: Set<number> = new Set();
   public pendingEditNodeLine: number | null = null;
-  public inlineInkEnabled = false;
+  public inlineInkEnabled = true;
 
   public toggleInlineInk(): boolean {
     this.inlineInkEnabled = !this.inlineInkEnabled;
     this.wrapper?.classList.toggle('is-inline-ink-enabled', this.inlineInkEnabled);
+    this.wrapper?.querySelector('.mindmap-inline-ink-toggle')?.setAttribute(
+      'aria-pressed', String(this.inlineInkEnabled)
+    );
     return this.inlineInkEnabled;
   }
   private activeNodeContextMenu: Menu | null = null;

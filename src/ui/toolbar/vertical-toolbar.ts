@@ -2,7 +2,11 @@
 
 import { setIcon } from 'obsidian';
 import type { MindmapView } from '../../view/mindmap-view';
-import { addBlankDrawingAsChild } from '../../drawing/drawing-actions';
+import {
+  addBlankDrawingAsChild,
+  addBlankDrawingAsSibling,
+  addBlankDrawingAsRoot
+} from '../../drawing/drawing-actions';
 import { Notice } from 'obsidian';
 import { LayoutOptionsMenu } from '../menus/layout-options-menu';
 import { NodeOptionsMenu, NodeOptions } from '../menus/node-options-menu';
@@ -50,28 +54,43 @@ export class VerticalToolbar {
   private buildButtons() {
     const inlineInkButton = this.buttonsGroup.createEl('button');
     inlineInkButton.addClass('clickable-icon', 'mindmap-inline-ink-toggle');
+    inlineInkButton.setAttribute('type', 'button');
     setIcon(inlineInkButton, 'pencil');
-    inlineInkButton.setAttribute('aria-label', 'Pen directly on handwritten nodes');
-    inlineInkButton.setAttribute('title', 'Toggle handwriting on SVG nodes');
+    inlineInkButton.setAttribute('aria-label', 'Penna: scrivi nei nodi');
+    inlineInkButton.setAttribute('title', 'Attiva/disattiva scrittura sui nodi SVG');
+    inlineInkButton.setAttribute('aria-pressed', String(this.view.inlineInkEnabled));
     inlineInkButton.onclick = () => {
       const enabled = this.view.toggleInlineInk();
       new Notice(enabled ? 'Penna sui nodi: attiva' : 'Penna sui nodi: disattiva');
     };
 
-    const handwrittenChildButton = this.buttonsGroup.createEl('button');
-    handwrittenChildButton.addClass('clickable-icon');
-    setIcon(handwrittenChildButton, 'file-pen-line');
-    handwrittenChildButton.setAttribute('aria-label', 'Add blank handwritten child');
-    handwrittenChildButton.setAttribute('title', 'Create a handwritten child of the selected node');
-    handwrittenChildButton.onclick = () => {
-      const node = this.view.getSelectedNodes()[0];
-      if (!node) {
-        new Notice('Select a parent node first.');
-        return;
-      }
-      if (!this.view.inlineInkEnabled) this.view.toggleInlineInk();
-      void addBlankDrawingAsChild(this.view, node);
+    const createHandwrittenNodeButton = (
+      icon: string,
+      label: string,
+      place: 'child' | 'sibling'
+    ): void => {
+      const button = this.buttonsGroup.createEl('button');
+      button.addClass('clickable-icon', 'eome-handwritten-create');
+      button.setAttribute('type', 'button');
+      setIcon(button, icon);
+      button.setAttribute('aria-label', label);
+      button.setAttribute('title', label);
+      button.onclick = () => {
+        const node = this.view.getSelectedNodes()[0];
+        if (!this.view.inlineInkEnabled) this.view.toggleInlineInk();
+        if (node) {
+          void (place === 'child'
+            ? addBlankDrawingAsChild(this.view, node)
+            : addBlankDrawingAsSibling(this.view, node));
+        } else if (this.view.getFlatNodes().length === 0) {
+          void addBlankDrawingAsRoot(this.view);
+        } else {
+          new Notice('Seleziona il nodo di riferimento con un tocco.');
+        }
+      };
     };
+    createHandwrittenNodeButton('file-pen-line', 'Nuovo nodo figlio manoscritto (o radice)', 'child');
+    createHandwrittenNodeButton('git-branch-plus', 'Nuovo nodo fratello manoscritto', 'sibling');
 
     // Undo Button
     const undoBtn = this.buttonsGroup.createEl('button');

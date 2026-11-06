@@ -25,7 +25,8 @@ import type { ExportedDrawingItem } from './types';
  */
 async function openDrawingEditor(
   view: MindmapView,
-  items: ExportedDrawingItem[]
+  items: ExportedDrawingItem[],
+  allowRelatedNodes = false
 ): Promise<DrawingModalResult | null> {
   let openDrawingModal: typeof import('./drawing-modal').openDrawingModal;
   try {
@@ -40,7 +41,8 @@ async function openDrawingEditor(
     view.app,
     items,
     (close) => view.registerTransientCloser(close),
-    view.penPreferences
+    view.penPreferences,
+    allowRelatedNodes
   );
 }
 
@@ -143,42 +145,67 @@ export async function addDrawingAsSibling(view: MindmapView, node: OutlineNode):
   }
 }
 
-export async function editDrawing(view: MindmapView, node: OutlineNode): Promise<void> {
-  if (!view.file) return;
-  const link = extractDrawingLink(node.text);
-  if (!link) return;
-  const attachment = view.app.metadataCache.getFirstLinkpathDest(link, view.file.path);
-  if (!(attachment instanceof TFile) || attachment.extension.toLowerCase() !== 'svg') {
-    new Notice('The drawing attachment could not be found.');
-    return;
-  }
-
+/**
+ * Open the built-in handwriting editor for an existing editable SVG.
+ * The associated markdown node is tracked by its unique attachment embed:
+ * indentation and line numbers can change when siblings are inserted.
+ */
+async function editDrawingAttachment(
+  view: MindmapView,
+  attachment: TFile,
+  sourcePath: string,
+  nodeText: string
+): Promise<void> {
+  if (view.file?.path !== sourcePath) return;
   try {
     const originalSvg = await view.app.vault.read(attachment);
-    const document = parseDrawingSvg(originalSvg);
-    if (!document) {
-      new Notice('This SVG is not an editable drawing created by this plugin.');
+    const drawing = parseDrawingSvg(originalSvg);
+    if (!drawing) {
+      new Notice('This SVG is not an editable drawing created by EOME.');
       return;
     }
-    const result = await openDrawingEditor(view, document.items);
+    const result = await openDrawingEditor(view, drawing.items, true);
     if (!result) return;
-    const latestSvg = await view.app.vault.read(attachment);
-    if (latestSvg !== originalSvg) {
-      new Notice('The drawing changed while the editor was open. Your edit was not saved to avoid overwriting newer changes.');
+    if (view.file?.path !== sourcePath) {
+      new Notice('The mindmap changed while editing. The drawing was not saved.');
       return;
     }
-    await view.app.vault.modify(attachment, createDrawingSvg(result.items, document.createdAt));
-    // No wait for the metadata cache in between: it only tracks Markdown, so
-    // an SVG attachment never emits its "changed" event and waiting for one
-    // just cost every save the full fallback timeout. What the redraw
-    // actually needs is the new mtime, and vault.modify has already committed
-    // that by the time it resolves.
+    if (await view.app.vault.read(attachment) !== originalSvg) {
+      new Notice('The drawing changed while its editor was open. Your edit was not saved to avoid overwriting another change.');
+      return;
+    }
+    await view.app.vault.modify(attachment, createDrawingSvg(result.items, drawing.createdAt));
     view.attachmentVersions.markCurrent(attachment);
     await view.refreshRenderedAttachments(attachment);
+    if (result.next) {
+      const matches = view.getFlatNodes().filter((node) => node.text === nodeText);
+      if (matches.length !== 1) {
+        new Notice('Drawing saved. Could not locate its node to create a related node.');
+        return;
+      }
+      const added = await createBlankRelativeDrawing(view, matches[0], result.next);
+      if (!added) return;
+      // Open the next handwriting sheet directly. No intermediate trip back to
+      // the map, keyboard, or context menu is required.
+      await editDrawingAttachment(view, added.attachment, sourcePath, added.embed);
+    }
   } catch (error) {
     console.error('Could not edit drawing:', error);
     new Notice('Could not update the drawing.');
   }
+}
+
+export async function editDrawing(view: MindmapView, node: OutlineNode): Promise<void> {
+  if (!view.file) return;
+  const sourcePath = view.file.path;
+  const link = extractDrawingLink(node.text);
+  if (!link) return;
+  const attachment = view.app.metadataCache.getFirstLinkpathDest(link, sourcePath);
+  if (!(attachment instanceof TFile) || attachment.extension.toLowerCase() !== 'svg') {
+    new Notice('The drawing attachment could not be found.');
+    return;
+  }
+  await editDrawingAttachment(view, attachment, sourcePath, node.text);
 }
 
 /**
@@ -274,28 +301,82 @@ export async function editExcalidrawDrawing(view: MindmapView, node: OutlineNode
   }
 }
 
-/**
- * Adds an editable SVG drawing as a child directly, without an editor modal.
- * The drawing is blank and can immediately receive Pencil strokes in ink mode.
- */
-export async function addBlankDrawingAsChild(view: MindmapView, node: OutlineNode): Promise<void> {
+type BlankDrawing = { attachment: TFile; embed: string };
+
+async function createBlankRelativeDrawing(
+  view: MindmapView,
+  node: OutlineNode,
+  placement: 'child' | 'sibling'
+): Promise<BlankDrawing | null> {
   const sourcePath = view.file?.path;
-  if (!sourcePath) return;
+  if (!sourcePath) return null;
   const liveTarget = resolveLiveTarget(view, node, sourcePath);
   if (!liveTarget) {
-    new Notice('Selected node changed before creating the drawing.');
-    return;
+    new Notice('The selected node has changed; no drawing was created.');
+    return null;
   }
   try {
     const attachment = await createAttachment(view, liveTarget, createDrawingSvg([]));
+    const embed = attachmentEmbed(view, attachment);
     try {
-      await view.executeAddChildTextCommand(liveTarget, attachmentEmbed(view, attachment));
+      if (placement === 'child') {
+        await view.executeAddChildTextCommand(liveTarget, embed);
+      } else {
+        await view.executeAddSiblingTextCommand(liveTarget, embed);
+      }
     } catch (error) {
-      console.error('Could not insert handwriting child node:', error);
-      new Notice('Drawing saved as ' + attachment.path + ', but its child node could not be inserted.');
+      console.error('Drawing attachment created without its node:', error);
+      new Notice('Drawing saved as ' + attachment.path + ', but the node could not be inserted.');
+      return null;
     }
+    const newNode = view.getFlatNodes().find((candidate) => candidate.text === embed);
+    if (newNode) view.selectNode(newNode.line);
+    return { attachment, embed };
   } catch (error) {
-    console.error('Could not create handwriting node:', error);
-    new Notice('Could not create handwriting node.');
+    console.error('Could not create an empty drawing node:', error);
+    new Notice('Could not create the handwritten node.');
+    return null;
   }
+}
+
+/** Creates a first handwritten root in an empty mindmap, without typing text. */
+export async function addBlankDrawingAsRoot(view: MindmapView): Promise<void> {
+  const file = view.file;
+  if (!file) return;
+  if (view.getFlatNodes().length > 0) {
+    new Notice('Select a node first, then add a handwritten child or sibling.');
+    return;
+  }
+  try {
+    // Only change the document if it is still empty. Do not overwrite other
+    // markdown or a note modified externally while the button was pressed.
+    let created = false;
+    const attachment = await createAttachment(
+      view, { text: file.basename } as OutlineNode, createDrawingSvg([])
+    );
+    const embed = attachmentEmbed(view, attachment);
+    await view.app.vault.process(file, (contents) => {
+      if (contents.trim() !== '') return contents;
+      created = true;
+      return '- ' + embed + '\n';
+    });
+    if (!created) {
+      new Notice('The note is no longer empty. Select an existing node.');
+      return;
+    }
+    await view.reloadDataIncremental();
+    const node = view.getFlatNodes().find((candidate) => candidate.text === embed);
+    if (node) view.selectNode(node.line);
+  } catch (error) {
+    console.error('Could not create handwritten root:', error);
+    new Notice('Could not create handwritten root.');
+  }
+}
+
+export async function addBlankDrawingAsChild(view: MindmapView, node: OutlineNode): Promise<void> {
+  await createBlankRelativeDrawing(view, node, 'child');
+}
+
+export async function addBlankDrawingAsSibling(view: MindmapView, node: OutlineNode): Promise<void> {
+  await createBlankRelativeDrawing(view, node, 'sibling');
 }

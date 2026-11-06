@@ -1,6 +1,8 @@
 import { Notice } from 'obsidian';
 import { isMoveTargetInsideSourceSubtree } from '../domain/mindmap-file';
 import { startNodeEditing } from '../editor/node-editing';
+import { editNodeContent } from '../drawing/drawing-actions';
+import { extractDrawingLink } from '../drawing/drawing-link';
 import type { MindmapView } from './mindmap-view';
 import { InlineInkController } from '../drawing/inline-ink';
 import { clearDropPreview, DropIntent, updateDropPreview } from './overlay-dnd';
@@ -519,6 +521,11 @@ export class MindmapGestureCoordinator {
 
     this.view.clearSelection();
     this.view.dismissNodeContextMenu();
+    if (extractDrawingLink(node.text)) {
+      void editNodeContent(this.view, node);
+      this.transition('edit');
+      return;
+    }
     const editor = startNodeEditing(box, node, this.view);
     if (!editor) return;
     this.transition('edit');

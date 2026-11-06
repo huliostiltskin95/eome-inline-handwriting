@@ -2,6 +2,8 @@ import { parseOutline, OutlineNode } from '../utils/outline';
 import { parseHeadingSections } from '../utils/heading-sections';
 import { MindmapView } from './mindmap-view';
 import { renderNodeMarkdown, startNodeEditing } from '../editor/node-editing';
+import { editNodeContent } from '../drawing/drawing-actions';
+import { extractDrawingLink } from '../drawing/drawing-link';
 import { clearDropPreview, DropIntent, DropPointer, updateDropPreview } from './overlay-dnd';
 import { isMoveTargetInsideSourceSubtree } from '../domain/mindmap-file';
 import { renderHeadingFrames, startHeadingEditing, updateHeadingFrameGeometry } from './heading-frames';
@@ -360,7 +362,11 @@ function performOverlayUpdate(view: MindmapView): void {
       e.preventDefault();
 
       view.dismissNodeContextMenu();
-      startNodeEditing(box, nodeToUse, view);
+      if (extractDrawingLink(nodeToUse.text)) {
+        void editNodeContent(view, nodeToUse);
+      } else {
+        startNodeEditing(box, nodeToUse, view);
+      }
     });
 
     // Prevent internal elements from starting their own drag operations

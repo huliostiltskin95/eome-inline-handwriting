@@ -13,25 +13,35 @@ Questa versione aggiunge **scrittura a mano direttamente nei nodi della mappa**,
 
 Il plugin ha un **ID diverso dall'originale**, quindi non ne sovrascrive i file. Per evitare che entrambi cerchino di gestire le stesse note, si consiglia di **disattivare il plugin EOME originale durante le prove**.
 
-## Uso della penna direttamente sulla mappa
+## Modalità pen-first (0.2.4)
 
-1. Crea una normale nota Markdown con un elenco puntato e aprila come mindmap.
-2. Seleziona un nodo, quindi premi il pulsante **file + penna** nella barra del plugin: viene creato un nodo figlio contenente un disegno SVG vuoto.
-3. Premi il pulsante **matita** per attivare/disattivare la modalità Penna (la creazione del figlio la attiva automaticamente).
-4. Scrivi con Apple Pencil **sopra l'area del nodo SVG**. I tratti vengono salvati nel disegno vettoriale originale.
-5. Per modificare il disegno usando gli strumenti completi del plugin originale, fai doppio tocco sul nodo: l'editor classico rimane disponibile.
-6. Il layout automatico continua a disporre i nodi gerarchicamente.
+Il plugin funziona dentro Obsidian: apri una nota Markdown e scegli **Mindmap view of this file** dal menu della nota. La modalità Penna è **attiva per impostazione predefinita**.
 
-Comandi alternativi nella palette di Obsidian:
+### Creare e scrivere un nodo
+
+1. Con una **nota Markdown vuota**, premi **Nuovo nodo figlio manoscritto** (icona file/penna) per creare la **radice** senza usare la tastiera.
+2. Seleziona un nodo della mappa con un tocco del **dito**, poi usa **Nuovo nodo figlio manoscritto** oppure **Nuovo nodo fratello manoscritto** nella barra degli strumenti.
+3. Con Apple Pencil **scrivi direttamente entro il disegno del nodo**: i tratti vengono salvati in un SVG editabile. Il dito serve per selezionare, spostarsi e zoomare.
+4. Per **espandere**, tocca la nuova icona **ingrandisci** nell'angolo alto del nodo manoscritto. È visibile anche senza hover su iPad.
+5. Nell'editor espanso puoi continuare a scrivere, poi scegliere **Salva**, **Salva + figlio** oppure **Salva + fratello**.
+6. Con **Salva + figlio/fratello**, il disegno corrente viene salvato, viene creato automaticamente il nodo collegato, e si apre subito **l'editor espanso del nuovo nodo**. Ripeti per prendere appunti senza rientrare ogni volta nella mappa.
+
+Anche i due controlli rapidi **Add child** e **Add sibling** dei nodi selezionati creano SVG manoscritti finché la modalità Penna è attiva. Disattivandola dalla barra riemerge il comportamento originale per i nodi testuali.
+
+### Comandi Obsidian
+
 - `Toggle direct handwriting on drawing nodes`
-- `Add a blank handwritten child node`
+- `Add a handwritten child node (or first root)`
+- `Add a handwritten sibling node`
+
+Il **layout Dagre automatico** resta attivo; la struttura continua a essere un normale elenco Markdown con immagini SVG incorporate.
 
 ## Limiti del prototipo
 
 - Funziona con i **nodi manoscritti SVG creati da EOME**, non con i normali nodi testuali o con le lavagne Excalidraw incorporate.
 - La penna deve essere riconosciuta come `pointerType = pen`; il dito conserva la navigazione.
 - Non include cancellino, selezione dei singoli tratti o annullamento del singolo tratto dalla vista mappa; per queste operazioni usa l'editor del nodo.
-- I tratti sono salvati nello stesso SVG editabile usato dal plugin, ma il flusso non è ancora stato collaudato su hardware reale.
+- I tratti sono salvati nello stesso SVG editabile usato dal plugin, ma la nuova versione pen-first non è ancora stata verificata su hardware reale.
 - Il layout potrebbe aggiornarsi leggermente dopo la conclusione dei tratti.
 - Evita di modificare lo stesso disegno su dispositivi differenti contemporaneamente; fai un backup del vault prima della prova.
 
@@ -43,7 +53,7 @@ npm test
 npm run build
 ```
 
-Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.2.3` con i file richiesti da BRAT.
+Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.2.4` con i file richiesti da BRAT.
 
 ## Provenienza e licenza
 
