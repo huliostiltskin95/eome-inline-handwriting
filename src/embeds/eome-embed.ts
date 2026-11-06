@@ -667,6 +667,9 @@ export async function renderMindmapEomeEmbed(
   observer.observe(wrapper);
   child.register(() => observer.disconnect());
   child.registerEvent(plugin.app.vault.on('modify', changed => {
+    // While the lower handwriting editor is active, leave the overview mounted.
+    // The scoped tab performs one consolidated refresh after the editor closes.
+    if (wrapper.closest('.eome-scoped-tab')?.querySelector('.eome-map-drawing-panel')) return;
     if (changed instanceof TFile && flat.some(n => {
       const link = extractDrawingLink(n.text);
       return link && resolveDrawingFile(plugin.app, link, file.path)?.path === changed.path;
