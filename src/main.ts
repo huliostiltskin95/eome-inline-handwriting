@@ -414,15 +414,21 @@ class EomeSettingsTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Cartella degli SVG EOME')
       .setDesc('Percorso relativo alla radice del vault. La cartella viene creata automaticamente al primo disegno; gli SVG già esistenti non vengono spostati.')
-      .addText(input => input
-        .setPlaceholder(DEFAULT_SVG_FOLDER)
-        .setValue(this.plugin.svgFolder)
-        .onChange(async value => {
-          // Save only a complete, valid folder name; never silently redirect to root.
-          try { await this.plugin.saveSvgFolder(value); }
-          catch { /* The on-blur handler below reports invalid input. */ }
-        })
-      );
+      .addText(input => {
+        input.setPlaceholder(DEFAULT_SVG_FOLDER).setValue(this.plugin.svgFolder);
+        const save = async (): Promise<void> => {
+          try {
+            await this.plugin.saveSvgFolder(input.getValue());
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : 'Cartella SVG non valida.');
+            input.setValue(this.plugin.svgFolder);
+          }
+        };
+        input.inputEl.addEventListener('change', () => { void save(); });
+        input.inputEl.addEventListener('keydown', event => {
+          if (event.key === 'Enter') input.inputEl.blur();
+        });
+      });
     new Setting(containerEl)
       .setName('Ripristina cartella predefinita')
       .addButton(button => button.setButtonText('Ripristina').onClick(async () => {
