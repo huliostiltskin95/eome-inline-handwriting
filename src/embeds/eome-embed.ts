@@ -21,9 +21,10 @@ import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRel
 import { routeRelations, type RouteNode } from '../view/relations-routing';
 import { appendRelationGeometry } from '../view/relations-overlay';
 import { extractDrawingLink } from '../drawing/drawing-link';
+import { liveDrawingSvg, resolveDrawingFile, svgImageSource } from '../drawing/live-svg';
 import { parseDrawingSvg } from '../drawing/drawing-svg';
 import { isInlineMindmapSource, findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById } from './inline-eome-source';
-import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD } from './inline-eome-identity';
+import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD, readInlineRelations } from './inline-eome-identity';
 import { normalizeRelations } from '../view/relations';
 import {
   addInlineDrawing, createFirstInlineDrawing,
@@ -93,9 +94,9 @@ async function measureNodes(
     // scaling preserves the original ink aspect ratio.
     const drawingLink = extractDrawingLink(node.text);
     const drawingFile = drawingLink
-      ? plugin.app.metadataCache.getFirstLinkpathDest(drawingLink, file.path) : null;
+      ? resolveDrawingFile(plugin.app, drawingLink, file.path) : null;
     if (drawingFile instanceof TFile && drawingFile.extension.toLowerCase() === 'svg') {
-      const svg = await plugin.app.vault.cachedRead(drawingFile);
+      const svg = await liveDrawingSvg(plugin.app, drawingFile);
       const drawing = parseDrawingSvg(svg);
       const viewBox = /\bviewBox\s*=\s*["']\s*([^"']+)["']/i.exec(svg);
       const box = viewBox?.[1].trim().split(/[\s,]+/).map(Number) ?? [];
@@ -236,12 +237,19 @@ async function renderOverlays(
       content.setCssProps({ '--mindmap-scale': String(node.scaleFactor) });
     }
 
-    if (node.text.trim() === '') {
+    const link = extractDrawingLink(node.text);
+    const attachment = link ? resolveDrawingFile(plugin.app, link, file.path) : null;
+    if (attachment?.extension.toLowerCase() === 'svg') {
+      const svg = await liveDrawingSvg(plugin.app, attachment);
+      content.createEl('img', { attr: { src: svgImageSource(svg), alt: link ?? 'Nodo manoscritto' } });
+      await waitForAsyncContent(content);
+    } else if (node.text.trim() === '') {
       content.textContent = '\u00a0';
     } else {
       await MarkdownRenderer.render(plugin.app, node.text, content, file.path, component);
       await waitForAsyncContent(content);
     }
+    if (cy.destroyed() || !wrapper.isConnected) return;
 
     // The SVG is laid out at its intrinsic ink ratio; prevent the generic
     // Markdown paragraph/margin rules from changing the measured rectangle.
@@ -370,7 +378,7 @@ export async function renderMindmapEomeEmbed(
   const maps = scoped && typeof scoped === 'object' && !Array.isArray(scoped)
     ? scoped as Record<string, unknown> : {};
   const allRelations = inline && mapId
-    ? normalizeRelations(maps[mapId])
+    ? (readInlineRelations(source) ?? normalizeRelations(maps[mapId]))
     : (explicitConnections ? readRelations(plugin.app, file) : []);
   const nodeKeys = new Set(flattenOutline(parseOutline(markdown)).map(node => relationNodeKey(plugin.app, file, node)));
   const relations = inline
@@ -561,18 +569,36 @@ export async function renderMindmapEomeEmbed(
     ],
   });
 
+  let rendering = Promise.resolve();
   cy.on('layoutstop', () => {
     arrangeTopLevelTrees(cy, roots, sizeMap, 'vertical', 160);
     arrangeRelationNodes(cy, sizeMap, relations, node => relationNodeKey(plugin.app, file, node));
     cy.fit(cy.elements(), 28);
     cy.center(cy.elements());
-    const redraw = async (): Promise<void> => {
+    const redraw = (): Promise<void> => {
+      rendering = rendering.catch(() => undefined).then(async () => {
+      if (cy.destroyed() || !wrapper.isConnected) return;
+      const measured = await measureNodes(plugin, child, file, flat);
+      let resized = false;
+      for (const [line, size] of measured) {
+        const old = sizeMap.get(line);
+        if (old?.w !== size.w || old?.h !== size.h) resized = true;
+        sizeMap.set(line, size);
+        cy.getElementById('n' + line).data({ width: size.w, height: size.h });
+      }
+      if (resized) {
+        arrangeTopLevelTrees(cy, roots, sizeMap, 'vertical', 160);
+        arrangeRelationNodes(cy, sizeMap, relations, node => relationNodeKey(plugin.app, file, node));
+        cy.fit(cy.elements(), 28);
+      }
       await renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap, inline);
       if (explicitConnections && wrapper.isConnected && !cy.destroyed()) {
         renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations,
           inlineContext ? (relation, position) =>
             showInlineArrowMenu(inlineContext, relation, position) : undefined);
       }
+      });
+      return rendering;
     };
     void redraw().then(() => {
       if (inlineContext && !stopInk) {

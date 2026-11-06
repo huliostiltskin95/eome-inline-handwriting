@@ -1,3 +1,4 @@
+import { resolveDrawingFile } from './live-svg';
 import { Notice, TFile } from 'obsidian';
 import type { MindmapView } from '../view/mindmap-view';
 import { extractDrawingLink } from './drawing-link';
@@ -61,7 +62,7 @@ export class InlineInkController {
     const node = this.view.getNodeByLine(Number(overlay.dataset.nodeLine));
     const link = node && extractDrawingLink(node.text);
     if (!link) return false;
-    const file = this.view.app.metadataCache.getFirstLinkpathDest(link, this.view.file.path);
+    const file = resolveDrawingFile(this.view.app, link, this.view.file.path);
     if (!(file instanceof TFile) || file.extension.toLowerCase() !== 'svg') return false;
     const image = overlay.querySelector<HTMLImageElement>('.markdown-rendered img');
     if (!image) return false;
@@ -182,7 +183,7 @@ export class InlineInkController {
     const node = this.view.getNodeByLine(line);
     const link = node && extractDrawingLink(node.text);
     if (!link || !this.view.file) return null;
-    const found = this.view.app.metadataCache.getFirstLinkpathDest(link, this.view.file.path);
+    const found = resolveDrawingFile(this.view.app, link, this.view.file.path);
     return found instanceof TFile && found.extension.toLowerCase() === 'svg' ? found : null;
   }
 

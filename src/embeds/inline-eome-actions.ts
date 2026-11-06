@@ -1,7 +1,8 @@
-import { Menu, Notice, TFile, type MarkdownPostProcessorContext } from 'obsidian';
+import { resolveDrawingFile } from '../drawing/live-svg';
+import { Menu, Notice, TFile, parseYaml, stringifyYaml, type MarkdownPostProcessorContext } from 'obsidian';
 import type MindmapPlugin from '../main';
 import { parseOutline, type OutlineNode } from '../utils/outline';
-import { INLINE_MAPS_FIELD, inlineMapId, stampInlineMap } from './inline-eome-identity';
+import { INLINE_MAPS_FIELD, inlineMapId, stampInlineMap, readInlineRelations, writeInlineRelations } from './inline-eome-identity';
 import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from '../drawing/drawing-svg';
 import { createEomeSvg } from '../drawing/svg-folder';
 import { extractDrawingLink } from '../drawing/drawing-link';
@@ -59,6 +60,7 @@ async function updateFence(context: InlineContext, next: string): Promise<void> 
   const scoped = context.ctx as MarkdownPostProcessorContext & {
     onInlineEomeSaved?: (newSource: string) => void;
   };
+  context.source = next;
   scoped.onInlineEomeSaved?.(next);
 }
 
@@ -93,22 +95,65 @@ async function modifyInlineRelations(context: InlineContext, stamped: string,
   action: (relations: EomeRelation[]) => EomeRelation[]): Promise<void> {
   const id = inlineMapId(stamped);
   if (!id) throw new Error('Identificatore EOME mancante');
-  await context.plugin.app.fileManager.processFrontMatter(context.file, frontmatter => {
-    const maps = frontmatter[INLINE_MAPS_FIELD] && typeof frontmatter[INLINE_MAPS_FIELD] === 'object'
-      && !Array.isArray(frontmatter[INLINE_MAPS_FIELD])
-      ? frontmatter[INLINE_MAPS_FIELD] as Record<string, unknown> : {};
-    const old = Object.prototype.hasOwnProperty.call(maps, id)
-      ? normalizeRelations(maps[id])
-      : migrateLegacy(context, stamped, normalizeRelations(frontmatter[RELATIONS_FIELD]));
-    maps[id] = action(old);
-    frontmatter[INLINE_MAPS_FIELD] = maps;
+  let saved = stamped;
+  const section = context.ctx.getSectionInfo(context.container);
+  await context.plugin.app.vault.process(context.file, markdown => {
+    const header = /^(?:\uFEFF)?---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(markdown);
+    const fm = header ? (parseYaml(header[1]) ?? {}) as Record<string, unknown> : {};
+    const maps = fm[INLINE_MAPS_FIELD] && typeof fm[INLINE_MAPS_FIELD] === 'object'
+      && !Array.isArray(fm[INLINE_MAPS_FIELD])
+      ? { ...fm[INLINE_MAPS_FIELD] as Record<string, unknown> } : {};
+    const local = readInlineRelations(stamped);
+    const scoped = Object.prototype.hasOwnProperty.call(maps, id);
+    const legacyRaw = fm[RELATIONS_FIELD];
+    const legacy = normalizeRelations(legacyRaw);
+    if (local === null && scoped && (!Array.isArray(maps[id]) || normalizeRelations(maps[id]).length !== (maps[id] as unknown[]).length)) {
+      throw new Error('Metadati EOME non validi: migrazione interrotta senza cancellare dati.');
+    }
+    const migrated = migrateLegacy(context, stamped, legacy);
+    const old = local ?? (scoped ? normalizeRelations(maps[id]) : migrated);
+    saved = writeInlineRelations(stamped, action(old));
+    let updated = replaceInlineMindmapFence(markdown, context.source, saved, section?.lineStart);
+    if (updated === null) throw new Error('Il blocco è cambiato: riaprilo prima di salvare.');
+    let cleaned = false;
+    // Remove only the exact per-map copy transferred in this transaction.
+    if (local === null && scoped) {
+      delete maps[id];
+      if (Object.keys(maps).length) fm[INLINE_MAPS_FIELD] = maps;
+      else delete fm[INLINE_MAPS_FIELD];
+      cleaned = true;
+    } else if (local === null && !scoped && migrated.length && Array.isArray(legacyRaw) && legacy.length === legacyRaw.length) {
+      // Shared legacy relations can be ambiguous across maps. Keep them unless
+      // both endpoint identities occur exactly once in the whole document.
+      const all = markdown.split(/\r?\n/).filter(line => /^\s*[-*+]\s/.test(line));
+      const counts = new Map<string, number>();
+      for (const line of all) for (const n of parseOutline(line.trim())) {
+        const key = relationNodeKey(context.plugin.app, context.file, n);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      const ids = new Set(migrated.map(r => r.id));
+      const remaining = legacy.filter(r => !ids.has(r.id) || counts.get(r.source) !== 1 || counts.get(r.target) !== 1);
+      if (remaining.length !== legacy.length) {
+        if (remaining.length) fm[RELATIONS_FIELD] = remaining;
+        else delete fm[RELATIONS_FIELD];
+        cleaned = true;
+      }
+    }
+    if (header && cleaned) {
+      const eol = markdown.includes('\r\n') ? '\r\n' : '\n';
+      const yaml = Object.keys(fm).length ? '---' + eol + stringifyYaml(fm).replace(/\s+$/, '').replace(/\n/g, eol) + eol + '---' + eol : '';
+      updated = yaml + updated.slice(header[0].length);
+    }
+    return updated;
   });
+  context.source = saved;
+  (context.ctx as MarkdownPostProcessorContext & { onInlineEomeSaved?: (source: string) => void })
+    .onInlineEomeSaved?.(saved);
 }
 
 export async function changeInlineArrow(context: InlineContext, relation: EomeRelation,
   mode: RelationArrowMode): Promise<void> {
   const stamped = stampInlineMap(context.source).source;
-  if (stamped !== context.source) await updateFence(context, stamped);
   await modifyInlineRelations(context, stamped, current => setRelationArrow(current, relation.id, mode));
 }
 
@@ -128,7 +173,7 @@ export function showInlineArrowMenu(context: InlineContext, relation: EomeRelati
 
 export async function addInlineDrawing(context: InlineContext, nodes: OutlineNode[],
   line: number | null, kind: RelationKind, arrow: RelationArrowMode,
-  initialItems?: ExportedDrawingItem[]): Promise<{ source: string; line: number; link: string } | null> {
+  initialItems?: ExportedDrawingItem[], sibling = false): Promise<{ source: string; line: number; link: string } | null> {
   if (!isInlineMindmapSource(context.source)) return null;
   const flatten = (values: OutlineNode[]): OutlineNode[] =>
     values.reduce((acc, node) => [...acc, node, ...flatten(node.children)], [] as OutlineNode[]);
@@ -137,6 +182,7 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
     new Notice('Il nodo selezionato non è più presente nel blocco.');
     return null;
   }
+  await modifyInlineRelations(context, stampInlineMap(context.source).source, relations => relations);
   let attachment: TFile | null = null;
   try {
     attachment = await createEomeSvg(context.plugin.app, context.plugin.svgFolder,
@@ -145,7 +191,7 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
     const embed = '![[ ' + link + ' ]]';
     const normalizedEmbed = embed.replace('![[ ', '![[').replace(' ]]', ']]');
     const base = stampInlineMap(context.source).source;
-    const inserted = insertHandwrittenNode(base, line, normalizedEmbed);
+    const inserted = insertHandwrittenNode(base, line, normalizedEmbed, sibling);
     if (inserted === null) throw new Error('Impossibile inserire il nodo in questo blocco.');
     const next = stampInlineMap(inserted).source;
     const flatten = (values: OutlineNode[]): OutlineNode[] =>
@@ -153,14 +199,20 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
     const updated = flatten(parseOutline(next));
     const newNode = updated.find(node => extractDrawingLink(node.text)?.trim() === link.trim());
     const previous = selected ? updated.find(node => node.line === selected.line) : null;
+    const parent = sibling && previous ? updated.find(n => n.children.some(c => c.line === previous.line)) : null;
     if (!newNode || (selected && !previous)) throw new Error('Identità del nodo non trovata.');
     pendingFocus.set(focusKey(context.file, next), { link: link.trim(), remaining: 3 });
     await updateFence(context, next);
-    await modifyInlineRelations(context, next, existing =>
-      previous ? createOrUpdateRelation(existing,
-        relationNodeKey(context.plugin.app, context.file, previous),
-        relationNodeKey(context.plugin.app, context.file, newNode), kind, arrow) : existing);
-    return { source: next, line: newNode.line, link };
+    await modifyInlineRelations(context, next, existing => {
+      const from = sibling ? parent : previous;
+      if (!from) return existing;
+      const sourceKey = relationNodeKey(context.plugin.app, context.file, from);
+      const inherited = sibling && previous ? existing.find(r => r.source === sourceKey &&
+        r.target === relationNodeKey(context.plugin.app, context.file, previous)) : undefined;
+      return createOrUpdateRelation(existing, sourceKey,
+        relationNodeKey(context.plugin.app, context.file, newNode), inherited?.kind ?? kind, arrow);
+    });
+    return { source: context.source, line: newNode.line, link };
 
   } catch (error) {
     console.error('Inline EOME node creation failed', {
@@ -242,7 +294,8 @@ export async function createFirstInlineDrawing(context: InlineContext): Promise<
 async function createInlineDrawingSeries(
   context: InlineContext, parentLine: number,
   relation: RelationKind,
-  initialResult?: { items: ExportedDrawingItem[]; next?: 'parallel' | 'elbow' }
+  sibling = false,
+  initialResult?: { items: ExportedDrawingItem[]; next?: 'parallel' | 'elbow' | 'sibling' }
 ): Promise<void> {
   const { openDrawingModal } = await import('../drawing/drawing-modal');
   const preferences = new PenPreferenceStore(context.plugin);
@@ -262,11 +315,12 @@ async function createInlineDrawingSeries(
       return;
     }
     const appended = await addInlineDrawing(
-      { ...context, source }, parseOutline(source), line, kind, 'none', result.items);
+      { ...context, source }, parseOutline(source), line, kind, 'none', result.items, sibling);
     if (!appended) return;
     source = appended.source;
     line = appended.line;
     if (!result.next) return;
+    sibling = result.next === 'sibling';
     kind = result.next === 'parallel' ? 'figlio' : 'dettaglio';
   }
 }
@@ -275,9 +329,9 @@ async function createInlineDrawingSeries(
  * Save + parallel/L actions. Intended for menus and touch long presses.
  */
 export async function createRelatedInlineDrawing(
-  context: InlineContext, node: OutlineNode, kind: RelationKind
+  context: InlineContext, node: OutlineNode, kind: RelationKind, sibling = false
 ): Promise<void> {
-  await createInlineDrawingSeries(context, node.line, kind);
+  await createInlineDrawingSeries(context, node.line, kind, sibling);
 }
 
 /** One context menu for the graph and the SVG fallback gallery. */
@@ -297,6 +351,9 @@ export function showInlineNodeMenu(context: InlineContext, roots: OutlineNode[],
     .setIcon('corner-down-right').onClick(() => {
       void createRelatedInlineDrawing(context, node, 'dettaglio');
     }));
+  menu.addItem(item => item.setTitle('Nuovo fratello').setIcon('plus').onClick(() => {
+    void createRelatedInlineDrawing(context, node, 'figlio', true);
+  }));
   showAt(menu, position, context);
 }
 
@@ -402,7 +459,12 @@ export function connectInlineHandwriting(
     getNodeByLine: (line: number) => flat.find(node => node.line === line) ?? null,
     penPreferences: new PenPreferenceStore(context.plugin),
     attachmentVersions: new AttachmentVersions(),
-    refreshRenderedAttachments: refresh
+    refreshRenderedAttachments: async () => {
+      if (readInlineRelations(context.source) === null) {
+        await modifyInlineRelations(context, stampInlineMap(context.source).source, relations => relations);
+      }
+      await refresh();
+    }
   } as unknown as MindmapView;
   const controller = new InlineInkController(host, wrapper);
   // Compact pen controls work on the selected SVG node, without opening a modal.
@@ -518,7 +580,7 @@ export async function editInlineDrawing(context: InlineContext, roots: OutlineNo
   node: OutlineNode): Promise<void> {
   const link = extractDrawingLink(node.text);
   if (!link) return;
-  const file = context.plugin.app.metadataCache.getFirstLinkpathDest(link, context.file.path);
+  const file = resolveDrawingFile(context.plugin.app, link, context.file.path);
   if (!(file instanceof TFile)) return;
   const before = await context.plugin.app.vault.read(file);
   const drawing = parseDrawingSvg(before);
@@ -531,10 +593,11 @@ export async function editInlineDrawing(context: InlineContext, roots: OutlineNo
     new Notice('Il disegno è cambiato mentre era aperto; nessuna sovrascrittura.');
     return;
   }
+  await modifyInlineRelations(context, stampInlineMap(context.source).source, relations => relations);
   await context.plugin.app.vault.modify(file,
     createDrawingSvg(result.items, drawing.createdAt, undefined, hasLegacyOpaqueBacking(before)));
   if (result.next) {
     await createInlineDrawingSeries(context, node.line,
-      result.next === 'parallel' ? 'figlio' : 'dettaglio');
+      result.next === 'parallel' ? 'figlio' : 'dettaglio', result.next === 'sibling');
   }
 }

@@ -13,6 +13,15 @@ Questa versione aggiunge **scrittura a mano direttamente nei nodi della mappa**,
 
 Il plugin ha un **ID diverso dall'originale**, quindi non ne sovrascrive i file. Per evitare che entrambi cerchino di gestire le stesse note, si consiglia di **disattivare il plugin EOME originale durante le prove**.
 
+## 0.4.6 — Fratelli, Solo penna e blocchi autonomi
+
+- **Salva + fratello** nell'editor avanzato salva il nodo corrente e apre subito il nuovo foglio allo stesso livello. Se B dipende da A, il fratello C dipende da A con lo stesso tipo di relazione di B, senza creare B→C. Un fratello della radice rimane una radice indipendente. La stessa azione è nel menu contestuale.
+- **Solo penna** è attivo per impostazione predefinita nell'editor avanzato ed è ricordato tra sessioni. Dito e palmo non creano tratti; gli strumenti selezione/spostamento e il pan/zoom a due dita restano disponibili. Disattivalo per disegnare anche col dito. Nella mappa il dito continua a selezionare senza disegnare.
+- **Metadati nel blocco:** le relazioni sono salvate nel commento `eome-data-v1` all'interno del rispettivo blocco `mindmap-eome`. Alla prima modifica i dati precedenti vengono trasferiti dal frontmatter nella stessa operazione di salvataggio. Vengono rimossi soltanto i dati migrati con certezza; altre proprietà, altre mappe e relazioni legacy ambigue sono conservate. Gli SVG restano allegati vettoriali.
+- **SVG aggiornati:** il renderer carica i byte correnti dal vault senza riutilizzare l'immagine vuota in cache; i nuovi allegati vengono risolti anche prima dell'indicizzazione. Le dimensioni sono aggiornate e i ridisegni sono serializzati. La vista alternativa rimane disponibile finché tutti i nodi dello schema sono caricati.
+
+Verifica: test automatici su migrazione, isolamento dei blocchi, fratelli, input dito/penna e lettura SVG aggiornata; compilazione mobile. I gesti Apple Pencil e BOOX richiedono ancora la verifica su dispositivo reale.
+
 ## 0.4.1 — Schede Obsidian e modifica avanzata dei nodi
 
 Le mappe `mindmap-eome` si aprono in una **scheda standard di Obsidian**, separata dalla nota Markdown, e non in una finestra modale. La scheda può essere affiancata o chiusa come qualsiasi altro pannello. Il contenuto modificabile resta sempre il singolo blocco selezionato: gli altri blocchi e la frontmatter della nota sono preservati.
@@ -59,7 +68,7 @@ EOME mostra «+ Crea la prima parola». Ogni nuovo nodo è salvato come **SVG ed
 ```
 ````
 
-Seleziona la grafia, premi **+**, scegli «Parallelo —» oppure «A L └» e l'eventuale freccia. Scrivi direttamente sullo SVG con penna o mouse. Il doppio tocco apre l'editor grafico espanso. Le relazioni sono memorizzate nella **frontmatter YAML della stessa nota**, mentre i tratti restano in allegati SVG, non in dati raster.
+Seleziona la grafia, premi **+**, scegli «Parallelo —» oppure «A L └» e l'eventuale freccia. Scrivi direttamente sullo SVG con penna o mouse. Il doppio tocco apre l'editor grafico espanso. Nella versione 0.3.4 le relazioni erano memorizzate nella **frontmatter YAML della stessa nota** (migrate nel blocco dalla 0.4.6), mentre i tratti restano in allegati SVG, non in dati raster.
 
 Nell'editor espanso i comandi ora sono **«Salva + parallelo —»** e **«Salva + L └»**. Dalla mappa completa puoi scegliere «Frecce dei collegamenti...» nel menu contestuale di un nodo, senza dover centrare un tratto sottile. Dopo l'aggiunta di un nodo, EOME aggiorna l'outline prima di salvare il collegamento, riducendo i rapporti mancanti.
 

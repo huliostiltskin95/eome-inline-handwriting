@@ -1,7 +1,7 @@
 import { Notice, TFile } from 'obsidian';
 import type { OutlineNode } from '../utils/outline';
 import type { MindmapView } from '../view/mindmap-view';
-import type { RelationKind } from '../view/relations';
+import { readRelations, relationNodeKey, type RelationKind } from '../view/relations';
 import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from './drawing-svg';
 import { createEomeSvg } from './svg-folder';
 import { extractDrawingLink } from './drawing-link';
@@ -186,7 +186,7 @@ async function editDrawingAttachment(
       // actions create a new SVG connected to the current drawing. Arrowheads
       // are adjusted afterwards in the main map using the relation menu.
       const added = await createBlankRelativeDrawing(
-        view, matches[0], 'child', result.next === 'parallel' ? 'figlio' : 'dettaglio'
+        view, matches[0], result.next === 'sibling' ? 'sibling' : 'child', result.next === 'elbow' ? 'dettaglio' : 'figlio'
       );
       if (!added) return;
       // Open the next handwriting sheet directly. No intermediate trip back to
@@ -351,7 +351,16 @@ async function createBlankRelativeDrawing(
       return { attachment, embed };
     }
     view.selectNode(newNode.line);
-    if (kind) await view.addRelation(liveTarget, newNode, kind, arrow);
+    if (kind) {
+      const from = placement === 'sibling'
+        ? view.getFlatNodes().find(n => n.children.some(c => c.text === liveTarget.text)) : liveTarget;
+      if (from && view.file) {
+        const inherited = placement === 'sibling' ? readRelations(view.app, view.file).find(r =>
+          r.source === relationNodeKey(view.app, view.file!, from) &&
+          r.target === relationNodeKey(view.app, view.file!, liveTarget)) : undefined;
+        await view.addRelation(from, newNode, inherited?.kind ?? kind, arrow);
+      }
+    }
     return { attachment, embed };
   } catch (error) {
     console.error('Could not create an empty drawing node:', error);

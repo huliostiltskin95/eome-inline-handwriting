@@ -1,3 +1,4 @@
+import { liveDrawingSvg, resolveDrawingFile, svgImageSource } from '../drawing/live-svg';
 import {
   ItemView, MarkdownRenderChild, TFile, Notice, type MarkdownPostProcessorContext,
   type WorkspaceLeaf, type ViewStateResult
@@ -227,13 +228,7 @@ export class EomeScopedEditor extends ItemView {
         void editInlineDrawing(editContext, roots, node);
       });
       const drawingLink = extractDrawingLink(node.text);
-      const destination = drawingLink
-        ? this.app.metadataCache.getFirstLinkpathDest(drawingLink, file.path)
-        : null;
-      const fallbackName = drawingLink?.split('/').pop();
-      const attachment = destination instanceof TFile ? destination
-        : this.app.vault.getFiles().find(f => f.extension.toLowerCase() === 'svg' &&
-          (f.path === drawingLink || f.name === fallbackName));
+      const attachment = drawingLink ? resolveDrawingFile(this.app, drawingLink, file.path) : null;
       if (attachment) {
         const image = row.createEl('img', {
           attr: {
@@ -241,6 +236,9 @@ export class EomeScopedEditor extends ItemView {
             alt: drawingLink ?? 'Nodo manoscritto'
           }
         });
+        void liveDrawingSvg(this.app, attachment).then(svg => {
+          image.src = svgImageSource(svg);
+        }).catch(error => console.error('EOME SVG load failed', error));
         image.setAttribute('title', 'Clicca per selezionare · doppio clic per modificare');
       } else {
         row.createSpan({ text: drawingLink ?? node.text });
@@ -346,7 +344,10 @@ export class EomeScopedEditor extends ItemView {
       if (!this.backup || this.closed || generation !== this.renderGeneration) return;
       const overlays = Array.from(target.querySelectorAll<HTMLElement>('.mindmap-eome-overlay'));
       // Hiding the fallback before ink becomes visible recreates the blank-tab bug.
-      this.backup.hidden = overlays.some(overlay => {
+      this.backup.hidden = overlays.length === parseOutline(outlineWithoutMapMarker(fence.content)).reduce((count, n) => {
+        const countNodes = (node: OutlineNode): number => 1 + node.children.reduce((sum, c) => sum + countNodes(c), 0);
+        return count + countNodes(n);
+      }, 0) && overlays.every(overlay => {
         const img = overlay.querySelector('img');
         const box = overlay.getBoundingClientRect();
         return !!img && img.complete && img.naturalWidth > 0 && box.width > 0 && box.height > 0;

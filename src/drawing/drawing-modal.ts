@@ -10,7 +10,7 @@ import { canonicalizeDrawing } from './drawing-changes';
 
 export interface DrawingModalResult {
   items: ExportedDrawingItem[];
-  next?: 'parallel' | 'elbow';
+  next?: 'parallel' | 'elbow' | 'sibling';
 }
 
 export function openDrawingModal(
@@ -71,6 +71,9 @@ class UnsavedDrawingModal extends Modal {
 }
 
 class DrawingModal extends Modal {
+  private penOnly = true;
+  private penModeChanged = false;
+  private penOnlyInput: HTMLInputElement | null = null;
   private board: SimpleWhiteboard | null = null;
   private inputController: WhiteboardInputAdapter | null = null;
   private pressurePen: PressurePenToolControl | null = null;
@@ -105,7 +108,17 @@ class DrawingModal extends Modal {
 
     const header = this.contentEl.createDiv({ cls: 'eome-drawing-header' });
     header.createEl('h2', { text: this.initialItems.length > 0 ? 'Edit drawing' : 'New drawing' });
-    header.createEl('p', { text: 'Pencil and finger input both draw. Hold briefly at the end of a stroke to straighten it.' });
+    header.createEl('p', { text: 'Scrivi con la penna. Con Solo penna attivo, il dito seleziona e naviga senza lasciare tratti.' });
+    const label = header.createEl('label');
+    const input = label.createEl('input', { type: 'checkbox' });
+    input.checked = this.penOnly;
+    this.penOnlyInput = input;
+    label.createSpan({ text: 'Solo penna (ignora i tratti del dito e del palmo)' });
+    input.addEventListener('change', () => {
+      this.penModeChanged = true;
+      this.penOnly = input.checked;
+      this.inputController?.setPenOnly(this.penOnly);
+    });
 
     const stage = this.contentEl.createDiv({ cls: 'eome-drawing-stage' });
     // The library's own tool palette is a floating pill it re-renders on every
@@ -147,7 +160,9 @@ class DrawingModal extends Modal {
         text: 'Salva + L └',
         cls: 'eome-drawing-followup'
       });
-      for (const button of [addChildButton, addSiblingButton]) {
+      const siblingButton = footer.createEl('button', { text: 'Salva + fratello', cls: 'eome-drawing-followup' });
+      siblingButton.addEventListener('click', () => this.commitSave('sibling'));
+      for (const button of [addChildButton, addSiblingButton, siblingButton]) {
         button.disabled = true;
         nextButtons.push(button);
       }
@@ -239,7 +254,7 @@ class DrawingModal extends Modal {
     }
   }
 
-  private commitSave(next?: 'parallel' | 'elbow'): void {
+  private commitSave(next?: 'parallel' | 'elbow' | 'sibling'): void {
     if (!this.board || this.settled) return;
 
     let items: ExportedDrawingItem[];
@@ -283,7 +298,7 @@ class DrawingModal extends Modal {
   private persistPenPreferences(): void {
     if (!this.penPreferences || !this.pressurePen) return;
     const { size, color } = this.pressurePen.getPenOptions();
-    void this.penPreferences.save({ size, color }).catch((error: unknown) => {
+    void this.penPreferences.save({ size, color, penOnly: this.penOnly }).catch((error: unknown) => {
       // The drawing itself is already saved; losing a tool preference is not
       // worth interrupting the user over.
       console.error('Could not persist the pen preferences:', error);
@@ -385,7 +400,7 @@ class DrawingModal extends Modal {
     // keeping a control that doesn't do what it visually claims to.
     const footerHost = board.shadowRoot?.querySelector<HTMLElement>('.footer-tools');
     footerHost?.setCssStyles({ display: 'none' });
-    this.inputController = new WhiteboardInputAdapter(board, canvas);
+    this.inputController = new WhiteboardInputAdapter(board, canvas, this.penOnly);
     if (this.initialItems.length > 0) board.importItems(this.initialItems, true);
     board.setCurrentTool('pen');
     board.draw();
@@ -408,6 +423,9 @@ class DrawingModal extends Modal {
       const preferences = await pending;
       if (this.isClosed) return;
       this.pressurePen?.applyPenOptions(preferences);
+      if (!this.penModeChanged) this.penOnly = preferences.penOnly !== false;
+      this.inputController?.setPenOnly(this.penOnly);
+      if (this.penOnlyInput) this.penOnlyInput.checked = this.penOnly;
     } catch (error) {
       // The editor is fully usable on the library's defaults.
       console.error('Could not restore the pen preferences:', error);

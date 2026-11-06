@@ -74,7 +74,7 @@ export function replaceInlineMindmapFence(
   return lines.join(eol);
 }
 
-export function insertHandwrittenNode(source: string, targetLine: number | null, embed: string): string | null {
+export function insertHandwrittenNode(source: string, targetLine: number | null, embed: string, sibling = false): string | null {
   const lines = source.trim() ? source.replace(/\r\n/g, '\n').split('\n') : [];
   if (targetLine === null) {
     if (lines.some(line => /^\s*[-*+]\s+/.test(line))) return null;
@@ -88,7 +88,7 @@ export function insertHandwrittenNode(source: string, targetLine: number | null,
     nodes.reduce((all, node) => all.concat(node, flatten(node.children)), [] as ReturnType<typeof parseOutline>);
   const target = flatten(roots).find(n => n.line === targetLine);
   if (!target) return null;
-  lines.splice(target.endLine + 1, 0, target.indent + '  - ' + embed);
+  lines.splice(target.endLine + 1, 0, target.indent + (sibling ? '- ' : '  - ') + embed);
   return lines.join('\n');
 }
 

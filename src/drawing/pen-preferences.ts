@@ -4,11 +4,13 @@ import { PEN_DEFAULT_SIZE, PEN_SIZE_RANGE } from './pen-stroke-options';
 export interface PenPreferences {
   size: number;
   color: string;
+  penOnly?: boolean;
 }
 
 export const DEFAULT_PEN_PREFERENCES: PenPreferences = {
   size: PEN_DEFAULT_SIZE,
   color: '#000000',
+  penOnly: true,
 };
 
 /** Key under which these live inside the plugin's single data.json object. */
@@ -43,6 +45,7 @@ export class PenPreferenceStore {
     return {
       size: readSize(stored?.size),
       color: readColor(stored?.color),
+      penOnly: stored?.penOnly !== false,
     };
   }
 
@@ -55,6 +58,7 @@ export class PenPreferenceStore {
     data[DATA_KEY] = {
       size: readSize(preferences.size),
       color: readColor(preferences.color),
+      penOnly: preferences.penOnly !== false,
     };
     await this.plugin.saveData(data);
   }

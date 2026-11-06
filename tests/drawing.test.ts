@@ -568,6 +568,33 @@ function adapterFixture(options: {
 }
 
 describe('whiteboard Pencil input adapter', () => {
+  it('pen-only blocks finger ink, keeps pinch delivery and accepts pen after palm-first contact', () => {
+    const { adapter, canvas, start } = adapterFixture({ emulateLibraryTouchStart: true });
+    adapter.setPenOnly(true);
+    canvas.emit('touchstart', touchEvent([1]) as unknown as Event);
+    expect(start).not.toHaveBeenCalled();
+    const pinch = touchEvent([2], [1, 2]);
+    canvas.emit('touchstart', pinch as unknown as Event);
+    expect(pinch.stopImmediatePropagation).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+    canvas.emit('pointerdown', pointerEvent() as unknown as Event);
+    expect(start).toHaveBeenCalledTimes(1);
+    adapter.destroy();
+  });
+
+  it('pen-only preserves finger selection and can be disabled', () => {
+    const { adapter, canvas, start, board } = adapterFixture({ emulateLibraryTouchStart: true, currentTool: 'pointer' });
+    adapter.setPenOnly(true);
+    canvas.emit('touchstart', touchEvent([1]) as unknown as Event);
+    expect(start).toHaveBeenCalledTimes(1);
+    canvas.emit('touchend', touchEvent([1], []) as unknown as Event);
+    board.setCurrentTool('pen');
+    adapter.setPenOnly(false);
+    canvas.emit('touchstart', touchEvent([2]) as unknown as Event);
+    expect(start).toHaveBeenCalledTimes(2);
+    adapter.destroy();
+  });
+
   it('leaves mouse and touch pointers to simple-whiteboard', () => {
     const { adapter, canvas, start } = adapterFixture();
     const mouse = pointerEvent({ pointerType: 'mouse', pressure: 0.2, tiltX: 18 });
@@ -1136,10 +1163,18 @@ describe('pen preferences persistence', () => {
     };
   };
 
+  it('remembers the explicit finger-drawing preference across editors', async () => {
+    const { plugin } = fakePlugin({ pen: { size: 4, color: '#000000', penOnly: false } });
+    const store = new PenPreferenceStore(plugin as unknown as Plugin);
+    expect((await store.load()).penOnly).toBe(false);
+    await store.save({ size: 5, color: '#123456', penOnly: true });
+    expect((await store.load()).penOnly).toBe(true);
+  });
+
   it('restores a stored size and colour', async () => {
     const { plugin } = fakePlugin({ pen: { size: 12, color: '#ff8800' } });
     const store = new PenPreferenceStore(plugin as unknown as Plugin);
-    expect(await store.load()).toEqual({ size: 12, color: '#ff8800' });
+    expect(await store.load()).toEqual({ size: 12, color: '#ff8800', penOnly: true });
   });
 
   it('falls back to defaults when nothing is stored yet', async () => {
@@ -1164,7 +1199,7 @@ describe('pen preferences persistence', () => {
     await store.save({ size: 7, color: '#123456' });
     expect(current()).toEqual({
       somethingElse: { keep: true },
-      pen: { size: 7, color: '#123456' },
+      pen: { size: 7, color: '#123456', penOnly: true },
     });
   });
 });

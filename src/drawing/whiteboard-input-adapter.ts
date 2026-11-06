@@ -107,7 +107,8 @@ export class WhiteboardInputAdapter {
 
   constructor(
     private readonly board: SimpleWhiteboard,
-    private readonly canvas: HTMLCanvasElement
+    private readonly canvas: HTMLCanvasElement,
+    private penOnly = false
   ) {
     canvas.setCssStyles({ touchAction: 'none' });
 
@@ -137,6 +138,8 @@ export class WhiteboardInputAdapter {
     this.ownerWindow?.addEventListener('pointerup', this.onWindowPointerUp);
     this.ownerWindow?.addEventListener('pointercancel', this.onWindowPointerCancel);
   }
+
+  setPenOnly(enabled: boolean): void { this.penOnly = enabled; }
 
   destroy(): void {
     try {
@@ -178,8 +181,8 @@ export class WhiteboardInputAdapter {
       // A prior finger contact can either be a normal tool interaction or the
       // library's area-export marquee. Only the former sets `interacting`.
       // Leave area export entirely on its native touch path.
-      if (!this.board.isInteracting()) return;
-      if (!this.rollbackNativeTouchInteraction()) {
+      if (!this.board.isInteracting() && !this.penOnly) return;
+      if (this.board.isInteracting() && !this.rollbackNativeTouchInteraction()) {
         // Do not begin a second interaction on top of a board state that could
         // not be proven equal to the pre-touch snapshot. Palm-suppress the
         // remaining finger sequence as well, because its tool was already ended.
@@ -286,6 +289,11 @@ export class WhiteboardInputAdapter {
       this.nativeTouchSnapshot = WhiteboardItemSnapshot.capture(this.board);
     }
     this.rememberTouches(event.changedTouches, this.activeNativeTouches);
+    // Keep native selection/move and two-finger pan/zoom. Gate only the
+    // drawing start so a finger cannot create ink, shapes, or erase content.
+    if (this.penOnly && !['pointer', 'move'].includes(this.board.getCurrentTool())) {
+      this.suspendDrawingStartForCurrentEvent();
+    }
     if (event.touches.length >= 2) this.nativeGestureWasMultiTouch = true;
     if (event.touches.length < 2) return;
 

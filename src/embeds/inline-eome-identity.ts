@@ -1,3 +1,4 @@
+import { normalizeRelations, type EomeRelation } from '../view/relations';
 /**
  * Persistent identities live inside the fence, not in the host note heading
  * or a positional index. Appending metadata leaves existing outline line
@@ -22,7 +23,7 @@ export function inlineNodeId(text: string): string | null {
 }
 /** Keep blank lines in place to preserve every OutlineNode.line. */
 export function outlineWithoutMapMarker(source: string): string {
-  return source.replace(MAP, '');
+  return source.replace(MAP, '').replace(DATA, '');
 }
 export function stampInlineMap(source: string): { source: string; id: string } {
   const id = inlineMapId(source) ?? newId();
@@ -38,3 +39,19 @@ export function stampInlineMap(source: string): { source: string; id: string } {
 }
 /** Uniqueness is enforced by the node annotation, even for repeated labels. */
 export function hasInlineNodeIdentity(text: string): boolean { return NODE.test(text); }
+
+const DATA = /^<!-- eome-data-v1: (.+) -->$/m;
+/** Encoded JSON cannot close its HTML comment or introduce outline lines. */
+export function readInlineRelations(source: string): EomeRelation[] | null {
+  const match = DATA.exec(source);
+  if (!match) return null;
+  const parsed = JSON.parse(decodeURIComponent(match[1]));
+  if (!Array.isArray(parsed)) throw new Error('Dati EOME del blocco non validi');
+  const relations = normalizeRelations(parsed);
+  if (relations.length !== parsed.length) throw new Error('Relazioni EOME del blocco non valide');
+  return relations;
+}
+export function writeInlineRelations(source: string, relations: EomeRelation[]): string {
+  const marker = '<!-- eome-data-v1: ' + encodeURIComponent(JSON.stringify(relations)) + ' -->';
+  return DATA.test(source) ? source.replace(DATA, () => marker) : source + '\n' + marker;
+}
