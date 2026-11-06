@@ -297,10 +297,16 @@ export function createDrawingSvg(
       maxX: Math.max(result.maxX, current.maxX), maxY: Math.max(result.maxY, current.maxY),
     }), bounds[0])
     : { minX: 0, minY: 0, maxX: 360, maxY: 160 };
-  const x = fixedCanvas?.x ?? (combined.minX - DRAWING_PADDING);
-  const y = fixedCanvas?.y ?? (combined.minY - DRAWING_PADDING);
-  const width = fixedCanvas?.width ?? Math.max(80, combined.maxX - combined.minX + DRAWING_PADDING * 2);
-  const height = fixedCanvas?.height ?? Math.max(60, combined.maxY - combined.minY + DRAWING_PADDING * 2);
+  // Pure handwriting is cropped to the actual vector stroke envelope.
+  // A smaller safety margin keeps glyph caps visible without forcing every
+  // short word into the old, oversized 80×60 rectangle. The editor's blank
+  // 360×160 sheet and mixed-shape drawings retain their previous dimensions.
+  const inkOnly = items.length > 0 && items.every(item => item.type === 'pen');
+  const padding = inkOnly ? 8 : DRAWING_PADDING;
+  const x = fixedCanvas?.x ?? (combined.minX - padding);
+  const y = fixedCanvas?.y ?? (combined.minY - padding);
+  const width = fixedCanvas?.width ?? Math.max(inkOnly ? 28 : 80, combined.maxX - combined.minX + padding * 2);
+  const height = fixedCanvas?.height ?? Math.max(inkOnly ? 28 : 60, combined.maxY - combined.minY + padding * 2);
   const body = items.map(itemToSvg).join('');
   const metadata = encodeBase64(JSON.stringify(document));
   // The editor supplies its own white paper. New saved SVG nodes contain only

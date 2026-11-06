@@ -993,6 +993,22 @@ describe('editable SVG drawing format', () => {
     expect(svgWidth).toBeCloseTo(canvasWidth, 1);
   });
 
+  it('crops pen-only ink to a tight proportional vector rectangle', () => {
+    const svg = createDrawingSvg([{
+      id: 'ink', type: 'pen',
+      data: {
+        path: [point(10, 12), point(210, 38)],
+        options: { color: '#123456', size: 2 }
+      }
+    }]);
+    const [x, y, width, height] = viewBox(svg);
+    expect(x).toBeCloseTo(0);
+    expect(y).toBeCloseTo(2);
+    expect(width).toBeCloseTo(220);
+    expect(height).toBeCloseTo(46);
+    expect(svg).not.toContain('<rect ');
+  });
+
   it('keeps pressure data in SVG metadata and produces a regular SVG preview', () => {
     const items = [{
       id: 'stroke-1',

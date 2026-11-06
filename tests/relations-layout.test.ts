@@ -12,9 +12,19 @@ describe('semantic node placement', () => {
     expect(placed[1].y).toBe(placed[0].y);
     for (const i of [2, 3]) {
       expect(placed[i].y - placed[i].h / 2).toBeGreaterThan(placed[i - 1].y + placed[i - 1].h / 2);
-      expect(placed[i].x - placed[i - 1].x).toBe(60);
+      expect(placed[i].x - placed[i].w / 2).toBeGreaterThan(placed[i - 1].x);
     }
-    for (const path of routeRelations(placed, links).paths.slice(1)) {
+    const routed = routeRelations(placed, links).paths;
+    expect(routed[0].points[0]).toEqual({
+      x: placed[0].x + placed[0].w / 2, y: placed[0].y
+    });
+    expect(routed[0].points.at(-1)).toEqual({
+      x: placed[1].x - placed[1].w / 2, y: placed[1].y
+    });
+    for (const [offset, path] of routed.slice(1).entries()) {
+      const parent = placed[offset + 1], detail = placed[offset + 2];
+      expect(path.points[0]).toEqual({ x: parent.x, y: parent.y + parent.h / 2 });
+      expect(path.points.at(-1)).toEqual({ x: detail.x - detail.w / 2, y: detail.y });
       expect(path.points).toHaveLength(3);
       expect(path.points[0].x).toBe(path.points[1].x);
       expect(path.points[1].y).toBe(path.points[2].y);

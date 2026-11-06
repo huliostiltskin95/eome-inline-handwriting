@@ -86,8 +86,8 @@ describe('side-of-handwriting attachment', () => {
       id: 'ab', source: 'a', target: 'b', kind: 'figlio', arrow: 'end'
     }]).paths[0];
     expect(route.points).toHaveLength(2);
-    expect(route.points[0].x).toBe(87);
-    expect(route.points[1].x).toBe(163);
+    expect(route.points[0].x).toBe(80);
+    expect(route.points[1].x).toBe(170);
     expect(route.points.every(p => p.y === 80)).toBe(true);
   });
 

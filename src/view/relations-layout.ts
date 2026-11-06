@@ -44,7 +44,9 @@ export function layoutRelationNodes(nodes: RouteNode[], relations: readonly Eome
       const child = indexed.get(rel.target)!;
       // An elbow must descend *below* the source, not sit alongside it.
       // Reserve enough indentation for the actual handwriting width.
-      const detailIndent = Math.max(60, Math.min(110, node.w / 2));
+      // The target's left edge must sit to the RIGHT of the source's
+      // bottom midpoint: this guarantees a descending, then rightward L.
+      const detailIndent = node.w / 2 + 64;
       bottom = place(child, left + detailIndent, bottom + gap);
     }
     return bottom;

@@ -1,6 +1,6 @@
 import {
   Component,
-  Modal,
+  Notice,
   MarkdownPostProcessorContext,
   MarkdownRenderChild,
   MarkdownRenderer,
@@ -20,7 +20,9 @@ import { arrangeTopLevelTrees } from '../view/tree-layout';
 import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRelation } from '../view/relations';
 import { routeRelations, type RouteNode } from '../view/relations-routing';
 import { appendRelationGeometry } from '../view/relations-overlay';
-import { isInlineMindmapSource } from './inline-eome-source';
+import { extractDrawingLink } from '../drawing/drawing-link';
+import { parseDrawingSvg } from '../drawing/drawing-svg';
+import { isInlineMindmapSource, findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById } from './inline-eome-source';
 import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD } from './inline-eome-identity';
 import { normalizeRelations } from '../view/relations';
 import {
@@ -85,6 +87,24 @@ async function measureNodes(
   document.body.appendChild(measureContainer);
 
   for (const node of flat) {
+    // Native handwritten SVG nodes are sized by their own vector viewBox,
+    // never by the old fixed 300px Markdown measurement column. Uniform
+    // scaling preserves the original ink aspect ratio.
+    const drawingLink = extractDrawingLink(node.text);
+    const drawingFile = drawingLink
+      ? plugin.app.metadataCache.getFirstLinkpathDest(drawingLink, file.path) : null;
+    if (drawingFile instanceof TFile && drawingFile.extension.toLowerCase() === 'svg') {
+      const svg = await plugin.app.vault.cachedRead(drawingFile);
+      const drawing = parseDrawingSvg(svg);
+      const viewBox = /\bviewBox\s*=\s*["']\s*([^"']+)["']/i.exec(svg);
+      const box = viewBox?.[1].trim().split(/[\s,]+/).map(Number) ?? [];
+      if (drawing && box.length === 4 && box.every(Number.isFinite)
+        && box[2] > 0 && box[3] > 0) {
+        const scale = Math.min(1, 320 / box[2], 220 / box[3]);
+        sizeMap.set(node.line, { w: box[2] * scale, h: box[3] * scale });
+        continue;
+      }
+    }
     const box = createDiv();
     box.className = 'mindmap-measure-box';
     box.setCssProps({ '--mindmap-target-width': `${targetWidth}px` });
@@ -169,6 +189,11 @@ async function renderOverlays(
   sizeMap: Map<number, { w: number; h: number }>,
   inline = false
 ): Promise<void> {
+  // Replacing image overlays after an SVG save must not clear the node the
+  // user is currently writing on or wants to branch from.
+  const selected = new Set(Array.from(wrapper.querySelectorAll<HTMLElement>(
+    '.mindmap-eome-overlay.selected[data-node-line]'))
+    .map(node => node.dataset.nodeLine));
   wrapper.querySelectorAll('[data-mindmap-eome-overlay]').forEach((overlay) => overlay.remove());
 
   const css = getComputedStyle(document.documentElement);
@@ -191,6 +216,7 @@ async function renderOverlays(
     box.className = 'mindmap-overlay mindmap-eome-overlay';
     box.dataset.mindmapEomeOverlay = '1';
     box.dataset.nodeLine = String(node.line);
+    if (selected.has(String(node.line))) box.classList.add('selected');
     box.setCssProps({
       '--mindmap-left': `${position.x}px`,
       '--mindmap-top': `${position.y}px`,
@@ -216,6 +242,15 @@ async function renderOverlays(
       await waitForAsyncContent(content);
     }
 
+    // The SVG is laid out at its intrinsic ink ratio; prevent the generic
+    // Markdown paragraph/margin rules from changing the measured rectangle.
+    const image = content.querySelector<HTMLImageElement>('img');
+    if (inline && image && extractDrawingLink(node.text)) {
+      image.style.width = dims.w + 'px';
+      image.style.height = dims.h + 'px';
+      image.style.maxWidth = 'none';
+      image.style.objectFit = 'contain';
+    }
     box.appendChild(content);
     wrapper.appendChild(box);
   }
@@ -301,7 +336,8 @@ export async function renderMindmapEomeEmbed(
   plugin: MindmapPlugin,
   source: string,
   el: HTMLElement,
-  ctx: MarkdownPostProcessorContext
+  ctx: MarkdownPostProcessorContext,
+  mode: 'preview' | 'editor' = 'preview'
 ): Promise<void> {
   el.classList.add('mindmap-eome-host');
   el.parentElement?.classList.add('mindmap-eome-codeblock');
@@ -339,7 +375,20 @@ export async function renderMindmapEomeEmbed(
   const relations = inline
     ? allRelations.filter(relation => nodeKeys.has(relation.source) && nodeKeys.has(relation.target))
     : allRelations;
-  const inlineContext = inline ? { plugin, file, source, container: el, ctx } : null;
+  const inlineContext = inline && mode === 'editor' ? { plugin, file, source, container: el, ctx } : null;
+  const openSelected = async (): Promise<void> => {
+    if (!inline) return;
+    const content = await plugin.app.vault.read(file);
+    const id = inlineMapId(source);
+    const position = ctx.getSectionInfo(el)?.lineStart;
+    const atLine = typeof position === 'number' ? findInlineFenceAtLine(content, position) : null;
+    const selected = (id ? findInlineFenceById(content, id) : null)
+      ?? (atLine && atLine.content.trim() === source.trim() ? atLine : null)
+      ?? findInlineFenceByContent(content, source);
+    if (!selected) { new Notice('Blocco EOME non identificabile: aprilo con il cursore sul blocco.'); return; }
+    const { openScopedEomeEditor } = await import('./eome-scoped-editor');
+    openScopedEomeEditor(plugin, file, selected);
+  };
   if (!isOutlineCompatible(markdown)) {
     renderError(el, `mindmap-eome: ${file.name} is not a compatible mindmap outline.`);
     return;
@@ -348,23 +397,24 @@ export async function renderMindmapEomeEmbed(
   const roots = parseOutline(markdown);
   const flat = flattenOutline(roots);
   if (flat.length === 0) {
-    if (!inlineContext) {
+    if (!inline) {
       renderError(el, `mindmap-eome: ${file.name} has no outline nodes.`);
       return;
     }
     el.empty();
     const start = el.createDiv({ cls: 'mindmap-eome-empty' });
     start.createEl('p', { text: 'Mappa manoscritta vuota' });
-    const add = start.createEl('button', { text: '+ Crea la prima parola' });
+    const add = start.createEl('button', { text: inlineContext ? '+ Prima parola' : 'Apri mappa EOME' });
     add.addEventListener('click', () => {
-      void addInlineDrawing(inlineContext, [], null, 'figlio', 'none');
+      if (inlineContext) void addInlineDrawing(inlineContext, [], null, 'figlio', 'none');
+      else void openSelected();
     });
     return;
   }
 
   el.empty();
   const wrapper = el.createDiv({ cls: inline
-    ? 'mindmap-eome-wrapper mindmap-eome-inline'
+    ? 'mindmap-eome-wrapper mindmap-eome-inline' + (mode === 'editor' ? ' eome-scoped-editing' : '')
     : 'mindmap-eome-wrapper' });
   // Registered before anything renders. Markdown rendered into this embed
   // must be owned by something that dies with the embed; the plugin instance
@@ -407,27 +457,17 @@ export async function renderMindmapEomeEmbed(
       event.preventDefault();
       void editInlineDrawing(inlineContext, roots, node);
     });
+  } else if (inline) {
     const openButton = wrapper.createEl('button', {
       cls: 'mindmap-eome-open-button',
-      attr: { 'aria-label': 'Espandi solo questa mappa' },
+      attr: { 'aria-label': 'Apri questa mappa EOME' },
     });
     setIcon(openButton, 'expand');
-    openButton.setAttribute('title', 'Apri solo questa mappa');
+    openButton.setAttribute('title', 'Apri questa mappa in una finestra');
     openButton.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      const section = ctx.getSectionInfo(el);
-      const modal = new Modal(plugin.app);
-      modal.contentEl.addClass('mindmap-eome-standalone-modal');
-      modal.setTitle('Mappa EOME');
-      modal.open();
-      const standalone = modal.contentEl.createDiv();
-      const scopedContext = {
-        ...ctx,
-        getSectionInfo: () => section,
-        addChild: (child: MarkdownRenderChild) => ctx.addChild(child)
-      } as MarkdownPostProcessorContext;
-      void renderMindmapEomeEmbed(plugin, source, standalone, scopedContext);
+      void openSelected();
     });
   } else {
     const openButton = wrapper.createEl('button', {

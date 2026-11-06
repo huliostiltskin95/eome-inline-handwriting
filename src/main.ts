@@ -3,14 +3,12 @@ import {
   WorkspaceLeaf,
   TFile,
   MarkdownView,
-  Menu,
   Notice,
   PluginSettingTab,
   Setting,
 } from 'obsidian';
 import { VIEW_TYPE_MINDMAP } from './constants';
 import { DEFAULT_SVG_FOLDER, validateSvgFolder } from './drawing/svg-folder';
-import { addToggleMindmapMenuItem } from './integration/context-menu';
 import { MindmapView } from './view/mindmap-view';
 import {
   addBlankDrawingAsChild,
@@ -21,6 +19,8 @@ import {
 import { openInternalLink } from './utils/outline';
 import type { RelationKind } from './view/relations';
 import { renderMindmapEomeEmbed } from './embeds/eome-embed';
+import { findInlineFenceAtLine, isInlineMindmapSource } from './embeds/inline-eome-source';
+import { openScopedEomeEditor } from './embeds/eome-scoped-editor';
 import { exportMindmapViewToCanvas } from './commands/export-canvas';
 import { exportMindmapViewToPdf, exportMindmapViewToSvg } from './commands/export-vector';
 
@@ -54,6 +54,32 @@ export default class MindmapPlugin extends Plugin {
 
     this.registerMarkdownCodeBlockProcessor('mindmap-eome', async (source, el, ctx) => {
       await renderMindmapEomeEmbed(this, source, el, ctx);
+    });
+
+    // Available through Obsidian's Slash Commands and the command palette.
+    // It intentionally reads only the fence under the current cursor.
+    this.addCommand({
+      id: 'open-eome-fence-at-cursor',
+      name: 'EOME: apri la mappa del blocco al cursore',
+      editorCheckCallback: (checking, editor, view) => {
+        const fence = findInlineFenceAtLine(editor.getValue(), editor.getCursor().line);
+        const canOpen = Boolean(view.file && fence && isInlineMindmapSource(fence.content));
+        if (checking) return canOpen;
+        if (!canOpen || !fence || !view.file) return false;
+        const file = view.file;
+        void (view instanceof MarkdownView ? view.save() : Promise.resolve()).then(async () => {
+          const current = findInlineFenceAtLine(await this.app.vault.read(file), fence.open);
+          if (!current || current.content.trim() !== fence.content.trim()) {
+            new Notice('Il blocco EOME è cambiato: riposiziona il cursore e riprova.');
+            return;
+          }
+          openScopedEomeEditor(this, file, current);
+        }).catch((error: unknown) => {
+          console.error('EOME scoped editor startup failed', error);
+          new Notice('Impossibile aprire la mappa EOME.');
+        });
+        return true;
+      },
     });
 
     this.addCommand({
@@ -179,30 +205,6 @@ export default class MindmapPlugin extends Plugin {
     });
 
     this.registerEvent(
-      this.app.workspace.on(
-        'file-menu',
-        (menu: Menu, abstractFile) => {
-          if (abstractFile instanceof TFile && abstractFile.extension === 'md') {
-            addToggleMindmapMenuItem(menu, this, abstractFile);
-          }
-        }
-      )
-    );
-
-    this.registerEvent(
-      this.app.workspace.on('editor-menu', (menu, _editor, info) => {
-        const file = info instanceof MarkdownView ? info.file : null;
-        if (!file || file.extension !== 'md') return;
-
-        menu.addItem((item) => {
-          item
-            .setTitle('Mindmap view of this file')
-            .onClick(() => void this.openMindmapReplacingLeaf(file));
-        });
-      })
-    );
-
-    this.registerEvent(
       this.app.vault.on('modify', (file) => {
         if (file instanceof TFile && file.extension === 'md') {
           void this.updateMindmapViews(file);
@@ -210,13 +212,7 @@ export default class MindmapPlugin extends Plugin {
       })
     );
 
-    this.registerEvent(
-      this.app.workspace.on('file-open', (file) => {
-        if (file instanceof TFile) {
-          this.scheduleOpenedFileMindmapAutoOpen(file);
-        }
-      })
-    );
+
   }
 
   onunload() {

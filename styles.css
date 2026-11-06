@@ -2249,3 +2249,68 @@ body.is-mobile .eome-drawing-footer button,
   color: var(--text-on-accent);
   border-color: var(--interactive-accent);
 }
+
+/* 0.4.0 — only the focused EOME window is editable; previews stay inert. */
+.eome-scoped-editor-modal {
+  width: min(98vw, 1300px);
+  max-width: 98vw;
+  height: min(94vh, 1080px);
+  max-height: 94vh;
+}
+.eome-scoped-editor-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 48px);
+  min-height: 0;
+}
+.eome-scoped-instructions {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  padding-bottom: 8px;
+}
+.eome-scoped-editor-host {
+  flex: 1 1 auto;
+  min-height: 420px;
+  overflow: auto;
+  position: relative;
+}
+.eome-scoped-editor-host .mindmap-eome-wrapper {
+  height: max(550px, 75vh);
+  min-height: 100%;
+}
+.mindmap-eome-inline:not(.eome-scoped-editing) .mindmap-eome-overlay {
+  pointer-events: none !important;
+  touch-action: auto;
+}
+.mindmap-eome-inline .mindmap-eome-overlay {
+  padding: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  overflow: visible;
+}
+.mindmap-eome-inline .mindmap-eome-overlay .markdown-rendered {
+  width: 100%;
+  height: 100%;
+  transform: none;
+  overflow: visible;
+}
+.mindmap-eome-inline .mindmap-eome-overlay .markdown-rendered p {
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+}
+.mindmap-eome-inline .mindmap-eome-overlay img {
+  display: block;
+  object-fit: contain;
+  padding: 0;
+  margin: 0;
+}
+.eome-scoped-editing .mindmap-eome-overlay { touch-action: none; }
+@media (max-width: 640px) {
+  .eome-scoped-editor-modal {
+    width: 100vw; max-width: 100vw;
+    height: 95vh; max-height: 95vh;
+  }
+  .eome-scoped-editor-host { min-height: 320px; }
+}
