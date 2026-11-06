@@ -151,6 +151,8 @@ export class EomeScopedEditor extends ItemView {
     divider.createDiv({ cls: 'eome-scoped-splitter-handle' });
     this.lowerPane = this.splitArea.createDiv({ cls: 'eome-scoped-lower-pane' });
     this.lowerPane.createDiv({ cls: 'eome-scoped-editor-placeholder', text: 'Seleziona un nodo manoscritto nella mappa per modificarlo qui sotto.' });
+    // Creation belongs to the editing area, not the two-action top toolbar.
+    this.lowerPane.appendChild(this.firstNodeButton);
     const setRatio = (value: number): void => {
       this.splitRatio = Math.min(80, Math.max(20, Math.round(value)));
       divider.setAttribute('aria-valuenow', String(this.splitRatio));
