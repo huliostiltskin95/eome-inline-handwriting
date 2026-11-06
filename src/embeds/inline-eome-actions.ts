@@ -61,7 +61,7 @@ async function updateFence(context: InlineContext, next: string): Promise<void> 
  */
 function migrateLegacy(context: InlineContext, stamped: string, legacy: EomeRelation[]): EomeRelation[] {
   const flatten = (nodes: OutlineNode[]): OutlineNode[] =>
-    nodes.flatMap(node => [node, ...flatten(node.children)]);
+    nodes.reduce((all, node) => all.concat(node, flatten(node.children)), [] as OutlineNode[]);
   const before = flatten(parseOutline(context.source));
   const after = new Map(flatten(parseOutline(stamped)).map(node => [node.line, node]));
   const keys = new Map<string, string[]>();
@@ -73,11 +73,12 @@ function migrateLegacy(context: InlineContext, stamped: string, legacy: EomeRela
     entries.push(relationNodeKey(context.plugin.app, context.file, next));
     keys.set(key, entries);
   }
-  return legacy.flatMap(relation => {
+  return legacy.reduce((result, relation) => {
     const source = keys.get(relation.source), target = keys.get(relation.target);
-    return source?.length === 1 && target?.length === 1
-      ? [{ ...relation, source: source[0], target: target[0] }] : [];
-  });
+    if (source?.length === 1 && target?.length === 1)
+      result.push({ ...relation, source: source[0], target: target[0] });
+    return result;
+  }, [] as EomeRelation[]);
 }
 
 async function modifyInlineRelations(context: InlineContext, stamped: string,
@@ -141,7 +142,7 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
     if (inserted === null) throw new Error('Impossibile inserire il nodo in questo blocco.');
     const next = stampInlineMap(inserted).source;
     const flatten = (values: OutlineNode[]): OutlineNode[] =>
-      values.flatMap(node => [node, ...flatten(node.children)]);
+      values.reduce((all, node) => all.concat(node, flatten(node.children)), [] as OutlineNode[]);
     const updated = flatten(parseOutline(next));
     const newNode = updated.find(node => extractDrawingLink(node.text)?.trim() === link.trim());
     const previous = selected ? updated.find(node => node.line === selected.line) : null;
