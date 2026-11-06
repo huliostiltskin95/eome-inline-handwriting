@@ -387,7 +387,7 @@ export async function renderMindmapEomeEmbed(
       ?? findInlineFenceByContent(content, source);
     if (!selected) { new Notice('Blocco EOME non identificabile: aprilo con il cursore sul blocco.'); return; }
     const { openScopedEomeEditor } = await import('./eome-scoped-editor');
-    openScopedEomeEditor(plugin, file, selected);
+    await openScopedEomeEditor(plugin, file, selected);
   };
   if (!isOutlineCompatible(markdown)) {
     renderError(el, `mindmap-eome: ${file.name} is not a compatible mindmap outline.`);
