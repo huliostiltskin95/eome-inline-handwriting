@@ -5,7 +5,8 @@
  */
 export function isInlineMindmapSource(source: string): boolean {
   const body = source.trim();
-  return body === '' || /^(?:[-*+]\s+|\d+\.\s+)/m.test(body);
+  return body === '' || /^<!-- eome-map-id: [a-z0-9-]{8,64} -->$/m.test(body)
+    || /^(?:[-*+]\s+|\d+\.\s+)/m.test(body);
 }
 
 interface Fence { open: number; close: number; content: string; prefix: string }
