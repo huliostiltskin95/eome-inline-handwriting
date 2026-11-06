@@ -21,7 +21,6 @@ import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRel
 import { routeRelations, type RouteNode } from '../view/relations-routing';
 import { appendRelationGeometry } from '../view/relations-overlay';
 import { isInlineMindmapSource, findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById } from './inline-eome-source';
-import { inlineMapId } from './inline-eome-identity';
 import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD } from './inline-eome-identity';
 import { normalizeRelations } from '../view/relations';
 import {
