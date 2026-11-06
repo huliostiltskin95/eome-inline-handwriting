@@ -13,6 +13,16 @@ Questa versione aggiunge **scrittura a mano direttamente nei nodi della mappa**,
 
 Il plugin ha un **ID diverso dall'originale**, quindi non ne sovrascrive i file. Per evitare che entrambi cerchino di gestire le stesse note, si consiglia di **disattivare il plugin EOME originale durante le prove**.
 
+## 0.5.0 — Strumenti nella mappa, anteprima adattiva e sintesi con graffa
+
+- **Strumenti sempre esposti nella scheda:** penna, gomma, selezione dei tratti, spostamento, forme, annulla/ripristina e creazione di paralleli, dettagli e fratelli. Gli strumenti vettoriali completi aprono una superficie di lavoro **incorporata nella stessa scheda**, sotto la mappa, senza una finestra modale separata. Seleziona il nodo, scegli lo strumento e salva per applicare la modifica; resta disponibile la scrittura rapida direttamente sul nodo.
+- **Sintesi:** attiva **Lazo nodi**, circonda con penna o mouse il centro di almeno due nodi, scegli **} Sintesi a destra** oppure **{ Sintesi a sinistra**, quindi premi **Crea sintesi** e scrivi il nuovo nodo. Annullare o salvare un foglio vuoto non crea nodi. Il lazo non interpreta il dito/palmo come penna.
+- Una **sola graffa e un solo collegamento** raccolgono il gruppo. La graffa segue il layout e le dimensioni dei membri. Tocca il collegamento collettivo per invertirlo oppure rimuoverlo conservando i nodi. La gerarchia Markdown preesistente non viene modificata; il nodo di sintesi è una nuova radice. I gruppi sono salvati nel commento `eome-summaries-v1` del loro blocco.
+- **Anteprima statica:** larghezza adattiva, altezza derivata dalle proporzioni e aggiornamento al ridimensionamento della nota. Grafia, collegamenti, graffe e frecce usano la stessa scala geometrica.
+- **E-ink:** controlli fermi e leggibili, selezione con contorno ad alto contrasto, nessuna animazione e superficie avanzata senza griglia puntinata. Il salvataggio SVG aggiorna la mappa interessata senza ricreare tutta la scheda; gli elementi grafici esistenti vengono riutilizzati e gli aggiornamenti ravvicinati sono accorpati.
+
+Verifica: suite automatica e compilazione mobile. Non sono ancora verificati su dispositivi reali Apple Pencil, BOOX e il relativo refresh e-ink. La prova visuale nel browser locale è stata impedita dalle restrizioni del runtime; occorre quindi confermare l'ergonomia sul dispositivo.
+
 ## 0.4.6 — Fratelli, Solo penna e blocchi autonomi
 
 - **Salva + fratello** nell'editor avanzato salva il nodo corrente e apre subito il nuovo foglio allo stesso livello. Se B dipende da A, il fratello C dipende da A con lo stesso tipo di relazione di B, senza creare B→C. Un fratello della radice rimane una radice indipendente. La stessa azione è nel menu contestuale.
@@ -149,7 +159,7 @@ npm test
 npm run build
 ```
 
-Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.4` con i file richiesti da BRAT.
+Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** con la versione del manifest con i file richiesti da BRAT.
 
 ## Provenienza e licenza
 

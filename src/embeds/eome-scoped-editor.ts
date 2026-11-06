@@ -100,16 +100,17 @@ export class EomeScopedEditor extends ItemView {
     });
     toolbar.createDiv({
       cls: 'eome-scoped-instructions',
-      text: 'Primo nodo: editor avanzato obbligatorio. Per i successivi, seleziona un nodo e usa —+ oppure └+.'
+      text: 'Seleziona un nodo e usa gli strumenti. Lazo nodi → Crea sintesi per riassumere un gruppo.'
     });
     this.status = this.contentEl.createDiv({ cls: 'eome-tab-render-status' });
     this.host = this.contentEl.createDiv({ cls: 'eome-scoped-editor-host' });
     this.registerEvent(this.app.vault.on('modify', changed => {
       if (!this.file) return;
-      if (changed.path === this.file.path || (changed instanceof TFile && changed.extension.toLowerCase() === 'svg')) {
-        this.scheduleRefresh(changed.path === this.file.path ? 120 : 500);
+      if (changed.path === this.file.path) {
+        this.scheduleRefresh(120);
       }
     }));
+    this.contentEl.addEventListener('eome-editor-closed', () => this.scheduleRefresh(150));
     if (this.file) await this.refresh();
   }
 
@@ -280,6 +281,7 @@ export class EomeScopedEditor extends ItemView {
 
   private async refresh(): Promise<void> {
     if (this.closed || !this.host || !this.file) return;
+    if (this.contentEl.querySelector('.eome-map-drawing-panel')) return;
     const generation = ++this.renderGeneration;
     const markdown = await this.app.vault.read(this.file);
     if (this.closed || generation !== this.renderGeneration || !this.host) return;

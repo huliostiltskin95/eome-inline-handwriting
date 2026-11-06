@@ -1,3 +1,5 @@
+import { previewHeight } from './preview-viewport';
+import { readSummaryGroups, summaryGeometry, layoutSummaryNodes, type SummaryGroup } from './summary-groups';
 import {
   Component,
   Notice,
@@ -30,7 +32,7 @@ import {
   addInlineDrawing, createFirstInlineDrawing,
   showInlineCreateMenu, showInlineArrowMenu,
   editInlineDrawing, connectInlineHandwriting, showInlineNodeMenu,
-  bindInlineNodeContextMenu
+  bindInlineNodeContextMenu, showSummaryMenu
 } from './inline-eome-actions';
 
 cytoscape.use(dagre);
@@ -60,7 +62,7 @@ function flattenOutline(nodes: OutlineNode[]): OutlineNode[] {
   return flat;
 }
 
-async function waitForAsyncContent(container: HTMLElement): Promise<void> {
+async function waitForAsyncContent(container: HTMLElement, frame = true): Promise<void> {
   const images = Array.from(container.querySelectorAll('img'));
 
   await Promise.all(images.map((img) => {
@@ -73,7 +75,7 @@ async function waitForAsyncContent(container: HTMLElement): Promise<void> {
     });
   }));
 
-  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  if (frame) await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 }
 
 async function measureNodes(
@@ -196,7 +198,7 @@ async function renderOverlays(
   const selected = new Set(Array.from(wrapper.querySelectorAll<HTMLElement>(
     '.mindmap-eome-overlay.selected[data-node-line]'))
     .map(node => node.dataset.nodeLine));
-  wrapper.querySelectorAll('[data-mindmap-eome-overlay]').forEach((overlay) => overlay.remove());
+  const existing = new Map(Array.from(wrapper.querySelectorAll<HTMLElement>('.mindmap-eome-overlay[data-node-line]')).map(node => [Number(node.dataset.nodeLine), node]));
 
   const css = getComputedStyle(document.documentElement);
   const txt = css.getPropertyValue('--text-normal').trim() || '#000';
@@ -214,8 +216,9 @@ async function renderOverlays(
     if (!cyNode || cyNode.empty() || !dims) continue;
 
     const position = cyNode.renderedPosition();
-    const box = createDiv();
-    box.className = 'mindmap-overlay mindmap-eome-overlay';
+    const previous = existing.get(node.line);
+    const box = previous ?? createDiv();
+    if (!previous) box.className = 'mindmap-overlay mindmap-eome-overlay';
     box.dataset.mindmapEomeOverlay = '1';
     box.dataset.nodeLine = String(node.line);
     if (selected.has(String(node.line))) box.classList.add('selected');
@@ -231,7 +234,7 @@ async function renderOverlays(
       '--mindmap-font': font,
     });
 
-    const content = createDiv();
+    const content = previous?.querySelector<HTMLElement>('.markdown-rendered') ?? createDiv();
     content.className = 'markdown-rendered';
     if (node.scaleFactor && node.scaleFactor !== 1) {
       content.setCssProps({ '--mindmap-scale': String(node.scaleFactor) });
@@ -241,11 +244,14 @@ async function renderOverlays(
     const attachment = link ? resolveDrawingFile(plugin.app, link, file.path) : null;
     if (attachment?.extension.toLowerCase() === 'svg') {
       const svg = await liveDrawingSvg(plugin.app, attachment);
-      content.createEl('img', { attr: { src: svgImageSource(svg), alt: link ?? 'Nodo manoscritto' } });
-      await waitForAsyncContent(content);
+      const src = svgImageSource(svg);
+      const current = content.querySelector('img');
+      if (current) { if (current.getAttribute('src') !== src) current.src = src; }
+      else content.createEl('img', { attr: { src, alt: link ?? 'Nodo manoscritto' } });
+      await waitForAsyncContent(content, false);
     } else if (node.text.trim() === '') {
       content.textContent = '\u00a0';
-    } else {
+    } else if (!previous) {
       await MarkdownRenderer.render(plugin.app, node.text, content, file.path, component);
       await waitForAsyncContent(content);
     }
@@ -260,8 +266,7 @@ async function renderOverlays(
       image.style.maxWidth = 'none';
       image.style.objectFit = 'contain';
     }
-    box.appendChild(content);
-    wrapper.appendChild(box);
+    if (!previous) { box.appendChild(content); wrapper.appendChild(box); }
   }
 }
 
@@ -274,10 +279,12 @@ function renderEmbeddedRelations(
   cy: cytoscape.Core, flat: OutlineNode[],
   sizes: Map<number, { w: number; h: number }>,
   relations: EomeRelation[],
+  summaries: SummaryGroup[],
+  onSummaryClick: ((id: string, position: { x: number; y: number }) => void) | undefined,
   onRelationClick?: (relation: EomeRelation, position: { x: number; y: number }) => void
 ): void {
   wrapper.querySelector('svg.eome-relations-layer')?.remove();
-  if (!relations.length) return;
+  if (!relations.length && !summaries.length) return;
   const counts = new Map<string, number>();
   for (const node of flat) {
     const key = relationNodeKey(plugin.app, file, node);
@@ -290,18 +297,9 @@ function renderEmbeddedRelations(
     if (counts.get(key) !== 1) continue;
     const cyNode = cy.getElementById('n' + node.line);
     if (!cyNode || cyNode.empty()) continue;
-    const position = cyNode.renderedPosition();
+    const position = cyNode.position();
     const dim = sizes.get(node.line) ?? { w: 80, h: 40 };
-    const image = wrapper.querySelector<HTMLImageElement>(
-      '.mindmap-eome-overlay[data-node-line="' + node.line + '"] img');
-    const rect = image?.getBoundingClientRect();
-    nodes.push({
-      id: key,
-      x: rect ? rect.left + rect.width / 2 - bounds.left : position.x,
-      y: rect ? rect.top + rect.height / 2 - bounds.top : position.y,
-      w: rect?.width ?? dim.w * cy.zoom(),
-      h: rect?.height ?? dim.h * cy.zoom()
-    });
+    nodes.push({ id: key, x: position.x, y: position.y, w: dim.w, h: dim.h });
   }
   const routes = routeRelations(nodes, relations);
   const doc = wrapper.ownerDocument;
@@ -310,11 +308,34 @@ function renderEmbeddedRelations(
   svg.setAttribute('aria-hidden', 'true');
   const w = Math.max(1, wrapper.clientWidth);
   const h = Math.max(1, wrapper.clientHeight);
-  svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  const zoom = cy.zoom(), pan = cy.pan();
+  svg.setAttribute('viewBox', [-pan.x / zoom, -pan.y / zoom, w / zoom, h / zoom].join(' '));
   svg.setAttribute('width', String(w));
   svg.setAttribute('height', String(h));
   const color = doc.defaultView?.getComputedStyle(wrapper).getPropertyValue('--text-normal').trim() || '#424242';
   appendRelationGeometry(svg, routes, color);
+  for (const group of summaries) {
+    const d = summaryGeometry(group, nodes);
+    if (!d) continue;
+    const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', '1.7');
+    path.setAttribute('data-summary-id', group.id);
+    svg.appendChild(path);
+    if (onSummaryClick) {
+      const hit = path.cloneNode() as SVGPathElement;
+      hit.setAttribute('stroke', 'transparent');
+      hit.setAttribute('stroke-width', String(20 / cy.zoom()));
+      hit.setAttribute('pointer-events', 'stroke');
+      hit.addEventListener('click', event => {
+        event.preventDefault(); event.stopPropagation();
+        onSummaryClick(group.id, { x: event.clientX, y: event.clientY });
+      });
+      svg.appendChild(hit);
+    }
+  }
   if (onRelationClick) {
     for (const route of routes.paths) {
       const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -322,7 +343,7 @@ function renderEmbeddedRelations(
       path.setAttribute('d', route.points.map((p, i) =>
         (i ? 'L' : 'M') + p.x + ',' + p.y).join(' '));
       path.setAttribute('stroke', 'transparent');
-      path.setAttribute('stroke-width', '20');
+      path.setAttribute('stroke-width', String(20 / cy.zoom()));
       path.setAttribute('fill', 'none');
       path.setAttribute('pointer-events', 'stroke');
       path.addEventListener('click', event => {
@@ -384,6 +405,7 @@ export async function renderMindmapEomeEmbed(
   const relations = inline
     ? allRelations.filter(relation => nodeKeys.has(relation.source) && nodeKeys.has(relation.target))
     : allRelations;
+  const summaries = inline ? readSummaryGroups(source) : [];
   const inlineContext = inline && mode === 'editor' ? { plugin, file, source, container: el, ctx } : null;
   const openSelected = async (): Promise<void> => {
     if (!inline) return;
@@ -569,43 +591,87 @@ export async function renderMindmapEomeEmbed(
     ],
   });
 
-  let rendering = Promise.resolve();
-  cy.on('layoutstop', () => {
+  const arrange = (): void => {
     arrangeTopLevelTrees(cy, roots, sizeMap, 'vertical', 160);
     arrangeRelationNodes(cy, sizeMap, relations, node => relationNodeKey(plugin.app, file, node));
+    const nodes = flat.map(node => ({ id: relationNodeKey(plugin.app, file, node),
+      ...cy.getElementById('n' + node.line).position(), ...sizeMap.get(node.line)! }));
+    const positions = new Map(layoutSummaryNodes(nodes, summaries).map(n => [n.id, n]));
+    flat.forEach(node => {
+      const p = positions.get(relationNodeKey(plugin.app, file, node));
+      if (p) cy.getElementById('n' + node.line).position({ x: p.x, y: p.y });
+    });
+  };
+  const fit = (): void => {
+    if (mode === 'preview') {
+      const b = cy.elements().boundingBox();
+      const width = wrapper.clientWidth;
+      if (width > 0) wrapper.style.height = previewHeight(width, b.w, b.h) + 'px';
+    }
+    cy.resize();
     cy.fit(cy.elements(), 28);
-    cy.center(cy.elements());
-    const redraw = (): Promise<void> => {
-      rendering = rendering.catch(() => undefined).then(async () => {
+  };
+  let rendering = Promise.resolve();
+  let queued = false;
+  let dirty = false;
+  let measurePending = false;
+  const redraw = (measure = true): Promise<void> => {
+    dirty = true;
+    measurePending = measurePending || measure;
+    if (queued) return rendering;
+    queued = true;
+    rendering = rendering.catch(() => undefined).then(async () => {
+      while (dirty) {
+      dirty = false;
+      const needsMeasurement = measurePending;
+      measurePending = false;
       if (cy.destroyed() || !wrapper.isConnected) return;
-      const measured = await measureNodes(plugin, child, file, flat);
-      let resized = false;
-      for (const [line, size] of measured) {
-        const old = sizeMap.get(line);
-        if (old?.w !== size.w || old?.h !== size.h) resized = true;
-        sizeMap.set(line, size);
-        cy.getElementById('n' + line).data({ width: size.w, height: size.h });
+      if (needsMeasurement) {
+        const measured = await measureNodes(plugin, child, file, flat);
+        let resized = false;
+        for (const [line, size] of measured) {
+          const old = sizeMap.get(line);
+          if (old?.w !== size.w || old?.h !== size.h) resized = true;
+          sizeMap.set(line, size);
+          cy.getElementById('n' + line).data({ width: size.w, height: size.h });
+        }
+        if (resized) arrange();
       }
-      if (resized) {
-        arrangeTopLevelTrees(cy, roots, sizeMap, 'vertical', 160);
-        arrangeRelationNodes(cy, sizeMap, relations, node => relationNodeKey(plugin.app, file, node));
-        cy.fit(cy.elements(), 28);
-      }
+      fit();
       await renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap, inline);
       if (explicitConnections && wrapper.isConnected && !cy.destroyed()) {
-        renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations,
-          inlineContext ? (relation, position) =>
-            showInlineArrowMenu(inlineContext, relation, position) : undefined);
+        renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations, summaries,
+          inlineContext ? (id, position) => showSummaryMenu(inlineContext, id, position) : undefined,
+          inlineContext ? (relation, position) => showInlineArrowMenu(inlineContext, relation, position) : undefined);
       }
-      });
-      return rendering;
-    };
-    void redraw().then(() => {
-      if (inlineContext && !stopInk) {
-        stopInk = connectInlineHandwriting(inlineContext, wrapper, flat, redraw);
+      }
+    }).then(() => { queued = false; }, error => { queued = false; throw error; });
+    return rendering;
+  };
+  cy.on('layoutstop', () => {
+    arrange();
+    void redraw(false).then(() => {
+      if (inlineContext && !stopInk && !cy.destroyed()) {
+        stopInk = connectInlineHandwriting(inlineContext, wrapper, flat, () => redraw());
       }
     });
   });
+  // Observe width only: changing preview height must not trigger a resize loop.
+  let lastWidth = wrapper.clientWidth;
+  const observer = new ResizeObserver(() => {
+    const width = wrapper.clientWidth;
+    if (Math.abs(width - lastWidth) < 1) return;
+    lastWidth = width;
+    void redraw(false);
+  });
+  observer.observe(wrapper);
+  child.register(() => observer.disconnect());
+  child.registerEvent(plugin.app.vault.on('modify', changed => {
+    if (changed instanceof TFile && flat.some(n => {
+      const link = extractDrawingLink(n.text);
+      return link && resolveDrawingFile(plugin.app, link, file.path)?.path === changed.path;
+    })) void redraw();
+  }));
 
   cy.layout(layoutOptions).run();
 

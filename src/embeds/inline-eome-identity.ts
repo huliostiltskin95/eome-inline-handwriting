@@ -1,3 +1,4 @@
+import { SUMMARY_MARKER } from './summary-groups';
 import { normalizeRelations, type EomeRelation } from '../view/relations';
 /**
  * Persistent identities live inside the fence, not in the host note heading
@@ -23,7 +24,7 @@ export function inlineNodeId(text: string): string | null {
 }
 /** Keep blank lines in place to preserve every OutlineNode.line. */
 export function outlineWithoutMapMarker(source: string): string {
-  return source.replace(MAP, '').replace(DATA, '');
+  return source.replace(MAP, '').replace(DATA, '').replace(SUMMARY_MARKER, '');
 }
 export function stampInlineMap(source: string): { source: string; id: string } {
   const id = inlineMapId(source) ?? newId();

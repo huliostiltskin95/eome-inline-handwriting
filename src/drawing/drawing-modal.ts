@@ -18,15 +18,18 @@ export function openDrawingModal(
   initialItems: ExportedDrawingItem[] = [],
   registerCloser?: (close: () => void) => () => void,
   penPreferences?: PenPreferenceStore,
-  allowRelatedNodes = false
+  allowRelatedNodes = false,
+  inlineHost?: HTMLElement,
+  initialTool = 'pen'
 ): Promise<DrawingModalResult | null> {
   return new Promise((resolve) => {
-    const modal = new DrawingModal(app, initialItems, resolve, penPreferences, allowRelatedNodes);
+    const modal = new DrawingModal(app, initialItems, resolve, penPreferences, allowRelatedNodes, inlineHost, initialTool);
     // The lifecycle closer fires when the mindmap view itself goes away, and
     // it must not stop to ask anything: there is nobody left to answer, and
     // the editor cannot outlive the view it belongs to.
     modal.setLifecycleCleanup(registerCloser?.(() => modal.closeWithoutPrompt()) ?? null);
-    modal.open();
+    if (inlineHost) modal.mountInline();
+    else modal.open();
   });
 }
 
@@ -91,9 +94,24 @@ class DrawingModal extends Modal {
     private readonly initialItems: ExportedDrawingItem[],
     private readonly resolveResult: (result: DrawingModalResult | null) => void,
     private readonly penPreferences?: PenPreferenceStore,
-    private readonly allowRelatedNodes = false
+    private readonly allowRelatedNodes = false,
+    private readonly inlineHost?: HTMLElement,
+    private readonly initialTool = 'pen'
   ) {
     super(app);
+  }
+
+  mountInline(): void {
+    this.inlineHost!.appendChild(this.contentEl);
+    this.contentEl.addClass('eome-drawing-inline');
+    this.onOpen();
+    this.inlineHost!.addEventListener('eome-history', event => {
+      if ((event as CustomEvent<string>).detail === 'undo') this.board?.undo();
+      else this.board?.redo();
+    });
+    this.inlineHost!.addEventListener('eome-tool', event => {
+      this.board?.setCurrentTool((event as CustomEvent<string>).detail);
+    });
   }
 
   setLifecycleCleanup(cleanup: (() => void) | null): void {
@@ -203,7 +221,10 @@ class DrawingModal extends Modal {
    */
   close(): void {
     if (this.isDiscarding || !this.hasUnsavedChanges()) {
-      super.close();
+      if (this.inlineHost) {
+        this.onClose();
+        this.contentEl.remove();
+      } else super.close();
       return;
     }
     if (this.unsavedPrompt) return;
@@ -321,7 +342,7 @@ class DrawingModal extends Modal {
       throw new Error('The simple-whiteboard custom element was not registered in the active Obsidian window.');
     }
     board.hideLocalePicker = true;
-    board.dottedBackground = true;
+    board.dottedBackground = !this.inlineHost;
     // Always English, regardless of the host document's language: this
     // plugin's UI is English-only by design, and inheriting Obsidian's
     // interface language here would only translate the whiteboard's own
@@ -398,11 +419,16 @@ class DrawingModal extends Modal {
     // the nearest of a handful of fixed presets (25/50/75/100/150/200/400%)
     // rather than showing the actual live zoom - removing it rather than
     // keeping a control that doesn't do what it visually claims to.
+    if (this.inlineHost && board.shadowRoot) {
+      const style = ownerDocument.createElement('style');
+      style.textContent = '* { animation: none !important; transition: none !important; box-shadow: none !important; }';
+      board.shadowRoot.appendChild(style);
+    }
     const footerHost = board.shadowRoot?.querySelector<HTMLElement>('.footer-tools');
     footerHost?.setCssStyles({ display: 'none' });
     this.inputController = new WhiteboardInputAdapter(board, canvas, this.penOnly);
     if (this.initialItems.length > 0) board.importItems(this.initialItems, true);
-    board.setCurrentTool('pen');
+    board.setCurrentTool(this.initialTool);
     board.draw();
     this.board = board;
     // Taken from the board rather than from initialItems, so the import's own

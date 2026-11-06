@@ -6,7 +6,10 @@ vi.mock('obsidian', async importOriginal => ({
   stringifyYaml: JSON.stringify,
 }));
 import { TFile } from 'obsidian';
-import { changeInlineArrow, addInlineDrawing } from '../src/embeds/inline-eome-actions';
+vi.mock('../src/drawing/drawing-modal', () => ({ openDrawingModal: vi.fn() }));
+import { openDrawingModal } from '../src/drawing/drawing-modal';
+import { readSummaryGroups } from '../src/embeds/summary-groups';
+import { changeInlineArrow, addInlineDrawing, createInlineSummary } from '../src/embeds/inline-eome-actions';
 import { inlineMapId, readInlineRelations, stampInlineMap, writeInlineRelations, outlineWithoutMapMarker } from '../src/embeds/inline-eome-identity';
 import { findInlineFenceById, insertHandwrittenNode } from '../src/embeds/inline-eome-source';
 import { isOutlineCompatible, parseOutline, flattenOutline } from '../src/utils/outline';
@@ -32,7 +35,7 @@ function fixture(fm: unknown, body = source) {
     },
     metadataCache: { fileToLinktext: (f: TFile) => f.path, getFirstLinkpathDest: () => null },
   }};
-  const context = { plugin, file, source: body, container: {} as HTMLElement,
+  const context = { plugin, file, source: body, container: { closest: () => null } as unknown as HTMLElement,
     ctx: { getSectionInfo: () => null, onInlineEomeSaved: vi.fn() } } as unknown as Parameters<typeof changeInlineArrow>[0];
   return { context, read: () => markdown };
 }
@@ -106,5 +109,32 @@ describe('block-owned metadata and sibling regression', () => {
     const twice = stampInlineMap(once.source);
     expect(inlineMapId(twice.source)).toBe(once.id);
     expect(readInlineRelations(twice.source)).toEqual([relation]);
+  });
+});
+
+describe('summary creation transaction', () => {
+  it('creates the summary after drawing and persists one group without changing existing hierarchy', async () => {
+    vi.mocked(openDrawingModal).mockResolvedValue({ items: [{ id: 'ink', type: 'pen', data: {
+      path: [{ x: 0, y: 0, pressure: 0.5 }, { x: 30, y: 20, pressure: 0.5 }], options: { size: 3, color: '#000' }
+    } }] });
+    const f = fixture(null, writeInlineRelations(source, [relation]));
+    await createInlineSummary(f.context, [0, 1], 'left');
+    const groups = readSummaryGroups(f.context.source);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ members: ['node:aaaa-1111', 'node:bbbb-2222'], side: 'left' });
+    const outline = parseOutline(outlineWithoutMapMarker(f.context.source));
+    expect(outline).toHaveLength(2);
+    expect(outline[0].children).toHaveLength(1);
+    expect(readInlineRelations(f.context.source)).toEqual([relation]);
+    expect(relationNodeKey(f.context.plugin.app, f.context.file, outline[1])).toBe(groups[0].target);
+  });
+  it('cancellation and blank drawings do not create a group or change the note', async () => {
+    for (const result of [null, { items: [] }]) {
+      vi.mocked(openDrawingModal).mockResolvedValue(result);
+      const f = fixture(null, source);
+      const before = f.read();
+      await createInlineSummary(f.context, [0, 1], 'right');
+      expect(f.read()).toBe(before);
+    }
   });
 });

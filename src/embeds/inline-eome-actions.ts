@@ -1,3 +1,4 @@
+import { readSummaryGroups, writeSummaryGroups, pointInLasso } from './summary-groups';
 import { resolveDrawingFile } from '../drawing/live-svg';
 import { Menu, Notice, TFile, parseYaml, stringifyYaml, type MarkdownPostProcessorContext } from 'obsidian';
 import type MindmapPlugin from '../main';
@@ -28,12 +29,74 @@ const ARROWS: Array<[RelationArrowMode, string]> = [
   ['both', 'Frecce a entrambe le estremità']
 ];
 
-interface InlineContext {
+export interface InlineContext {
   plugin: MindmapPlugin;
   file: TFile;
   source: string;
   container: HTMLElement;
   ctx: MarkdownPostProcessorContext;
+}
+
+/** The complete vector editor is mounted inside the map tab, never in a new window. */
+async function openMapDrawing(context: InlineContext, items: ExportedDrawingItem[], related = false,
+  tool = 'pen'): Promise<import('../drawing/drawing-modal').DrawingModalResult | null> {
+  const tab = context.container.closest<HTMLElement>('.eome-scoped-tab');
+  const { openDrawingModal } = await import('../drawing/drawing-modal');
+  if (!tab) return openDrawingModal(context.plugin.app, items, undefined,
+    new PenPreferenceStore(context.plugin), related);
+  const existing = tab.querySelector<HTMLElement>('.eome-map-drawing-panel');
+  if (existing) {
+    existing.dispatchEvent(new CustomEvent('eome-tool', { detail: tool }));
+    return null;
+  }
+  const panel = tab.createDiv({ cls: 'eome-map-drawing-panel' });
+  try {
+    return await openDrawingModal(context.plugin.app, items, close => {
+      const observer = new MutationObserver(() => { if (!panel.isConnected) close(); });
+      observer.observe(tab.ownerDocument.body, { childList: true, subtree: true });
+      return () => observer.disconnect();
+    }, new PenPreferenceStore(context.plugin), related, panel, tool);
+  } finally {
+    panel.remove();
+    tab.dispatchEvent(new CustomEvent('eome-editor-closed'));
+  }
+}
+
+export async function createInlineSummary(context: InlineContext, lines: number[], side: 'left' | 'right'): Promise<void> {
+  if (new Set(lines).size < 2) { new Notice('Seleziona almeno due nodi con il lazo.'); return; }
+  const result = await openMapDrawing(context, []);
+  if (!result?.items.length) return;
+  // Stamp before deriving keys; existing unstamped nodes acquire stable identities.
+  await modifyInlineRelations(context, stampInlineMap(context.source).source, relations => relations);
+  const flatten = (nodes: OutlineNode[]): OutlineNode[] => nodes.reduce((all, n) => all.concat(n, flatten(n.children)), [] as OutlineNode[]);
+  const members = flatten(parseOutline(outlineWithoutMapMarker(context.source))).filter(n => lines.includes(n.line));
+  if (members.length !== new Set(lines).size) throw new Error('La selezione è cambiata.');
+  const attachment = await createEomeSvg(context.plugin.app, context.plugin.svgFolder,
+    'EOME sintesi.svg', createDrawingSvg(result.items));
+  const link = context.plugin.app.metadataCache.fileToLinktext(attachment, context.file.path, true);
+  const next = stampInlineMap(context.source + '\n- ![[' + link + ']]').source;
+  const target = flatten(parseOutline(outlineWithoutMapMarker(next))).find(n => extractDrawingLink(n.text) === link);
+  if (!target) throw new Error('Nodo riassuntivo non identificato.');
+  const groups = readSummaryGroups(next);
+  groups.push({ id: crypto.randomUUID(), side,
+    members: members.map(n => relationNodeKey(context.plugin.app, context.file, n)),
+    target: relationNodeKey(context.plugin.app, context.file, target) });
+  await updateFence(context, writeSummaryGroups(next, groups));
+}
+
+export function showSummaryMenu(context: InlineContext, id: string, position: { x: number; y: number }): void {
+  const menu = new Menu();
+  const apply = (side: 'left' | 'right' | null): void => {
+    const groups = readSummaryGroups(context.source);
+    const next = side === null ? groups.filter(g => g.id !== id)
+      : groups.map(g => g.id === id ? { ...g, side } : g);
+    void updateFence(context, writeSummaryGroups(context.source, next))
+      .catch(error => new Notice('Graffa: ' + String(error)));
+  };
+  menu.addItem(item => item.setTitle('{ Sintesi a sinistra').onClick(() => apply('left')));
+  menu.addItem(item => item.setTitle('} Sintesi a destra').onClick(() => apply('right')));
+  menu.addItem(item => item.setTitle('Rimuovi collegamento collettivo (conserva i nodi)').onClick(() => apply(null)));
+  showAt(menu, position, context);
 }
 
 function showAt(menu: Menu, place: { x: number; y: number }, context: InlineContext): void {
@@ -254,9 +317,7 @@ export async function createFirstInlineDrawing(context: InlineContext): Promise<
     new Notice('La mappa contiene già un primo nodo.');
     return;
   }
-  const { openDrawingModal } = await import('../drawing/drawing-modal');
-  const result = await openDrawingModal(context.plugin.app, [], undefined,
-    new PenPreferenceStore(context.plugin), false);
+  const result = await openMapDrawing(context, []);
   if (!result) return;
   const hasInk = result.items.some(item =>
     item.type === 'pen' && Array.isArray(item.data.path) && item.data.path.length > 0);
@@ -297,15 +358,13 @@ async function createInlineDrawingSeries(
   sibling = false,
   initialResult?: { items: ExportedDrawingItem[]; next?: 'parallel' | 'elbow' | 'sibling' }
 ): Promise<void> {
-  const { openDrawingModal } = await import('../drawing/drawing-modal');
-  const preferences = new PenPreferenceStore(context.plugin);
+
   let source = context.source;
   let line = parentLine;
   let kind = relation;
   let queued = initialResult;
   while (true) {
-    const result = queued ?? await openDrawingModal(
-      context.plugin.app, [], undefined, preferences, true);
+    const result = queued ?? await openMapDrawing(context, [], true);
     queued = undefined;
     if (!result) return;
     const hasContent = result.items.some(item =>
@@ -468,12 +527,16 @@ export function connectInlineHandwriting(
   } as unknown as MindmapView;
   const controller = new InlineInkController(host, wrapper);
   // Compact pen controls work on the selected SVG node, without opening a modal.
-  const toolbar = wrapper.createDiv({ cls: 'mindmap-eome-ink-tools' });
-  const undo = toolbar.createEl('button', { text: '↶', attr: { 'aria-label': 'Annulla ultimo tratto' } });
-  const redo = toolbar.createEl('button', { text: '↷', attr: { 'aria-label': 'Ripristina ultimo tratto' } });
-  const eraser = toolbar.createEl('button', { text: '⌫', attr: { 'aria-label': 'Cancellino vettoriale' } });
+  const toolbar = wrapper.ownerDocument.createElement('div');
+  toolbar.className = 'mindmap-eome-ink-tools';
+  wrapper.parentElement!.insertBefore(toolbar, wrapper);
+  const undo = toolbar.createEl('button', { text: '↶ Annulla', attr: { 'aria-label': 'Annulla ultimo tratto' } });
+  const redo = toolbar.createEl('button', { text: '↷ Ripristina', attr: { 'aria-label': 'Ripristina ultimo tratto' } });
+  const eraser = toolbar.createEl('button', { text: 'Gomma', attr: { 'aria-label': 'Cancellino vettoriale' } });
   eraser.setAttribute('aria-pressed', 'false');
   eraser.addEventListener('click', () => {
+    const panel = context.container.closest('.eome-scoped-tab')?.querySelector('.eome-map-drawing-panel');
+    if (panel) { panel.dispatchEvent(new CustomEvent('eome-tool', { detail: 'eraser' })); return; }
     const enabled = !controller.isEraserEnabled();
     controller.setEraserEnabled(enabled);
     eraser.setAttribute('aria-pressed', String(enabled));
@@ -495,19 +558,25 @@ export function connectInlineHandwriting(
     const line = Number(selected.dataset.nodeLine);
     return Number.isFinite(line) ? line : null;
   };
-  const editSelected = (): void => {
+  const editSelected = (tool = 'pen'): void => {
+    const panel = context.container.closest('.eome-scoped-tab')?.querySelector('.eome-map-drawing-panel');
+    if (panel) { panel.dispatchEvent(new CustomEvent('eome-tool', { detail: tool })); return; }
     const line = selectedLine();
     const node = line === null ? null : flat.find(item => item.line === line);
     if (!node) {
       new Notice('Seleziona prima il nodo manoscritto da modificare.');
       return;
     }
-    void editInlineDrawing(context, parseOutline(context.source), node).catch(error => {
+    void editInlineDrawing(context, parseOutline(context.source), node, tool).catch(error => {
       console.error('EOME advanced node editor failed', error);
       new Notice('Non è stato possibile aprire l’editor avanzato del nodo.');
     });
   };
-  advanced.addEventListener('click', editSelected);
+  advanced.addEventListener('click', () => editSelected());
+  for (const [tool, label] of [['pen', 'Penna'], ['pointer', 'Seleziona tratti'], ['move', 'Sposta'], ['line', 'Linea'], ['rect', 'Rettangolo'], ['circle', 'Ellisse']]) {
+    const button = toolbar.createEl('button', { text: label });
+    button.addEventListener('click', () => editSelected(tool));
+  }
   const pending = pendingFocus.get(focusKey(context.file, context.source));
   if (pending) {
     const node = flat.find(item => extractDrawingLink(item.text)?.trim() === pending.link);
@@ -524,11 +593,19 @@ export function connectInlineHandwriting(
       new Notice('Seleziona prima il nodo dal quale proseguire.');
       return;
     }
-    void addInlineDrawing(context, parseOutline(context.source), line, kind, 'none');
+    const node = flat.find(n => n.line === line);
+    if (node) void createRelatedInlineDrawing(context, node, kind).catch(error => new Notice(String(error)));
   };
   parallel.addEventListener('click', () => quickAdd('figlio'));
   detail.addEventListener('click', () => quickAdd('dettaglio'));
+  const sibling = toolbar.createEl('button', { text: '+ Fratello' });
+  sibling.addEventListener('click', () => {
+    const node = flat.find(n => n.line === selectedLine());
+    if (node) void createRelatedInlineDrawing(context, node, 'figlio', true).catch(error => new Notice(String(error)));
+  });
   const run = (action: 'undo' | 'redo') => {
+    const panel = context.container.closest('.eome-scoped-tab')?.querySelector('.eome-map-drawing-panel');
+    if (panel) { panel.dispatchEvent(new CustomEvent('eome-history', { detail: action })); return; }
     const line = selectedLine();
     if (line === null) { new Notice('Seleziona prima il nodo manoscritto.'); return; }
     void (action === 'undo' ? controller.undoLastStroke(line) : controller.redoLastStroke(line))
@@ -551,20 +628,79 @@ export function connectInlineHandwriting(
     mouseMode.setAttribute('aria-pressed', String(mouseDrawing));
     mouseMode.setText(mouseDrawing ? 'Mouse: disegno' : 'Disegna col mouse');
   });
+  let lassoMode = false;
+  let lassoPointer: number | null = null;
+  let polygon: Array<{ x: number; y: number }> = [];
+  let lassoSvg: SVGSVGElement | null = null;
+  let selectedLines: number[] = [];
+  const lasso = toolbar.createEl('button', { text: 'Lazo nodi', attr: { 'aria-pressed': 'false' } });
+  const side = toolbar.createEl('select', { attr: { 'aria-label': 'Orientamento graffa' } });
+  side.createEl('option', { text: '} Sintesi a destra', value: 'right' });
+  side.createEl('option', { text: '{ Sintesi a sinistra', value: 'left' });
+  const summarize = toolbar.createEl('button', { text: 'Crea sintesi (0)' });
+  summarize.disabled = true;
+  lasso.addEventListener('click', () => {
+    lassoMode = !lassoMode;
+    lasso.setAttribute('aria-pressed', String(lassoMode));
+    wrapper.classList.toggle('eome-lasso-active', lassoMode);
+  });
+  summarize.addEventListener('click', () => {
+    summarize.disabled = true;
+    void createInlineSummary(context, selectedLines, side.value as 'left' | 'right')
+      .catch(error => new Notice('Sintesi: ' + String(error)))
+      .then(() => { summarize.disabled = selectedLines.length < 2; });
+  });
+  const lassoEvent = (e: PointerEvent): boolean => {
+    if (!lassoMode || (e.target instanceof Element && e.target.closest('button, select, .eome-map-drawing-panel'))) return false;
+    if (e.type === 'pointerdown') {
+      // A finger/palm cannot start a selection while using the stylus.
+      if (e.pointerType === 'touch' || e.button !== 0 || lassoPointer !== null) return true;
+      lassoPointer = e.pointerId;
+      polygon = [{ x: e.clientX, y: e.clientY }];
+      lassoSvg = wrapper.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      lassoSvg.classList.add('eome-lasso-outline');
+      wrapper.appendChild(lassoSvg);
+      wrapper.setPointerCapture(e.pointerId);
+    } else if (lassoPointer === e.pointerId) {
+      polygon.push({ x: e.clientX, y: e.clientY });
+      if (e.type === 'pointermove' && lassoSvg) {
+        const rect = wrapper.getBoundingClientRect();
+        const path = wrapper.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', polygon.map((p, i) => (i ? 'L' : 'M') + (p.x - rect.left) + ',' + (p.y - rect.top)).join(' '));
+        lassoSvg.replaceChildren(path);
+      } else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+        selectedLines = [];
+        if (e.type !== 'pointercancel') wrapper.querySelectorAll<HTMLElement>('.mindmap-eome-overlay').forEach(node => {
+          const r = node.getBoundingClientRect();
+          const selected = pointInLasso({ x: r.left + r.width / 2, y: r.top + r.height / 2 }, polygon);
+          node.classList.toggle('eome-group-selected', selected);
+          if (selected) selectedLines.push(Number(node.dataset.nodeLine));
+        });
+        summarize.setText('Crea sintesi (' + selectedLines.length + ')');
+        summarize.disabled = selectedLines.length < 2;
+        lassoSvg?.remove(); lassoSvg = null; lassoPointer = null;
+        if (wrapper.hasPointerCapture(e.pointerId)) wrapper.releasePointerCapture(e.pointerId);
+      }
+    }
+    e.preventDefault(); e.stopImmediatePropagation();
+    return true;
+  };
   const shouldInk = (e: PointerEvent): boolean =>
     e.button === 0 && (e.pointerType === 'pen' ||
       (e.pointerType === 'mouse' && (mouseDrawing || e.altKey)));
   const down = (e: PointerEvent) => {
+    if (lassoEvent(e)) return;
     if (shouldInk(e)) controller.pointerDown(e);
   };
-  const move = (e: PointerEvent) => { controller.pointerMove(e); };
-  const up = (e: PointerEvent) => { controller.pointerEnd(e); };
+  const move = (e: PointerEvent) => { if (!lassoEvent(e)) controller.pointerMove(e); };
+  const up = (e: PointerEvent) => { if (!lassoEvent(e)) controller.pointerEnd(e); };
   wrapper.addEventListener('pointerdown', down, true);
   wrapper.addEventListener('pointermove', move, true);
   wrapper.addEventListener('pointerup', up, true);
   wrapper.addEventListener('pointercancel', up, true);
   return () => {
     controller.cancel();
+    lassoSvg?.remove();
     toolbar.remove();
     wrapper.removeEventListener('pointerdown', down, true);
     wrapper.removeEventListener('pointermove', move, true);
@@ -577,7 +713,7 @@ export function connectInlineHandwriting(
  * Follow-up buttons add the chosen parallel/L relationship to this same fence.
  */
 export async function editInlineDrawing(context: InlineContext, roots: OutlineNode[],
-  node: OutlineNode): Promise<void> {
+  node: OutlineNode, tool = 'pen'): Promise<void> {
   const link = extractDrawingLink(node.text);
   if (!link) return;
   const file = resolveDrawingFile(context.plugin.app, link, context.file.path);
@@ -585,9 +721,7 @@ export async function editInlineDrawing(context: InlineContext, roots: OutlineNo
   const before = await context.plugin.app.vault.read(file);
   const drawing = parseDrawingSvg(before);
   if (!drawing) return;
-  const { openDrawingModal } = await import('../drawing/drawing-modal');
-  const result = await openDrawingModal(context.plugin.app, drawing.items as ExportedDrawingItem[],
-    undefined, new PenPreferenceStore(context.plugin), true);
+  const result = await openMapDrawing(context, drawing.items as ExportedDrawingItem[], true, tool);
   if (!result) return;
   if (await context.plugin.app.vault.read(file) !== before) {
     new Notice('Il disegno è cambiato mentre era aperto; nessuna sovrascrittura.');
