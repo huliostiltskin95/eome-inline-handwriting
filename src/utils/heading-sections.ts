@@ -1,3 +1,4 @@
+import { mindmapSource } from './mindmap-source';
 import { flattenOutline, isMarkdownHeading, parseOutline } from './outline';
 
 export interface HeadingSection {
@@ -22,7 +23,7 @@ function parseMarkdownHeading(line: string): { text: string; level: number } | n
 }
 
 export function parseHeadingSections(markdown: string): HeadingSection[] {
-  const lines = markdown.split(/\r?\n/);
+  const lines = mindmapSource(markdown).split(/\r?\n/);
   const outlineNodes = flattenOutline(parseOutline(markdown));
   const outlineLines = new Set(outlineNodes.map((node) => node.line));
   const sections: HeadingSection[] = [];

@@ -1,3 +1,4 @@
+import { mindmapSource } from './mindmap-source';
 import { Modal, App, Setting } from 'obsidian';
 import { TFile } from 'obsidian';
 
@@ -31,7 +32,7 @@ export function parseCheckboxState(text: string): { checkbox: CheckboxState; tex
 }
 
 export function parseOutline(markdown: string): OutlineNode[] {
-  const lines = markdown.split(/\r?\n/);
+  const lines = mindmapSource(markdown).split(/\r?\n/);
   const rootNodes: OutlineNode[] = [];
   const levelStack: OutlineNode[] = [];
   const indentLevels: number[] = [];
@@ -163,7 +164,7 @@ export class TextInputModal extends Modal {
 }
 
 export function isOutlineCompatible(markdown: string): boolean {
-  const lines = markdown.split(/\r?\n/);
+  const lines = mindmapSource(markdown).split(/\r?\n/);
   
   // Remove frontmatter if present
   let startIndex = 0;
@@ -193,7 +194,7 @@ export function isOutlineCompatible(markdown: string): boolean {
 }
 
 export function isEmptyContent(markdown: string): boolean {
-  const lines = markdown.split(/\r?\n/);
+  const lines = mindmapSource(markdown).split(/\r?\n/);
   
   // Remove frontmatter if present
   let startIndex = 0;
