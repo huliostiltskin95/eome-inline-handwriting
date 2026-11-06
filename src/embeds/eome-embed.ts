@@ -20,6 +20,8 @@ import { arrangeTopLevelTrees } from '../view/tree-layout';
 import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRelation } from '../view/relations';
 import { routeRelations, type RouteNode } from '../view/relations-routing';
 import { appendRelationGeometry } from '../view/relations-overlay';
+import { extractDrawingLink } from '../drawing/drawing-link';
+import { parseDrawingSvg } from '../drawing/drawing-svg';
 import { isInlineMindmapSource, findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById } from './inline-eome-source';
 import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD } from './inline-eome-identity';
 import { normalizeRelations } from '../view/relations';
@@ -85,6 +87,24 @@ async function measureNodes(
   document.body.appendChild(measureContainer);
 
   for (const node of flat) {
+    // Native handwritten SVG nodes are sized by their own vector viewBox,
+    // never by the old fixed 300px Markdown measurement column. Uniform
+    // scaling preserves the original ink aspect ratio.
+    const drawingLink = extractDrawingLink(node.text);
+    const drawingFile = drawingLink
+      ? plugin.app.metadataCache.getFirstLinkpathDest(drawingLink, file.path) : null;
+    if (drawingFile instanceof TFile && drawingFile.extension.toLowerCase() === 'svg') {
+      const svg = await plugin.app.vault.cachedRead(drawingFile);
+      const drawing = parseDrawingSvg(svg);
+      const viewBox = /\\bviewBox\\s*=\\s*["']\\s*([^"']+)["']/i.exec(svg);
+      const box = viewBox?.[1].trim().split(/[\\s,]+/).map(Number) ?? [];
+      if (drawing && box.length === 4 && box.every(Number.isFinite)
+        && box[2] > 0 && box[3] > 0) {
+        const scale = Math.min(1, 320 / box[2], 220 / box[3]);
+        sizeMap.set(node.line, { w: box[2] * scale, h: box[3] * scale });
+        continue;
+      }
+    }
     const box = createDiv();
     box.className = 'mindmap-measure-box';
     box.setCssProps({ '--mindmap-target-width': `${targetWidth}px` });
@@ -216,6 +236,15 @@ async function renderOverlays(
       await waitForAsyncContent(content);
     }
 
+    // The SVG is laid out at its intrinsic ink ratio; prevent the generic
+    // Markdown paragraph/margin rules from changing the measured rectangle.
+    const image = content.querySelector<HTMLImageElement>('img');
+    if (inline && image && extractDrawingLink(node.text)) {
+      image.style.width = dims.w + 'px';
+      image.style.height = dims.h + 'px';
+      image.style.maxWidth = 'none';
+      image.style.objectFit = 'contain';
+    }
     box.appendChild(content);
     wrapper.appendChild(box);
   }
