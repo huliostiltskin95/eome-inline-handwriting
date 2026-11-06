@@ -167,6 +167,25 @@ export function connectInlineHandwriting(
     refreshRenderedAttachments: refresh
   } as unknown as MindmapView;
   const controller = new InlineInkController(host, wrapper);
+  // Compact pen controls work on the selected SVG node, without opening a modal.
+  const toolbar = wrapper.createDiv({ cls: 'mindmap-eome-ink-tools' });
+  const undo = toolbar.createEl('button', { text: '↶', attr: { 'aria-label': 'Annulla ultimo tratto' } });
+  const redo = toolbar.createEl('button', { text: '↷', attr: { 'aria-label': 'Ripristina ultimo tratto' } });
+  const selectedLine = (): number | null => {
+    const selected = wrapper.querySelector<HTMLElement>('.mindmap-eome-overlay.selected[data-node-line]');
+    if (!selected) return null;
+    const line = Number(selected.dataset.nodeLine);
+    return Number.isFinite(line) ? line : null;
+  };
+  const run = (action: 'undo' | 'redo') => {
+    const line = selectedLine();
+    if (line === null) { new Notice('Seleziona prima il nodo manoscritto.'); return; }
+    void (action === 'undo' ? controller.undoLastStroke(line) : controller.redoLastStroke(line))
+      .then(ok => { if (!ok) new Notice('Nessun tratto disponibile.'); })
+      .catch(error => { console.error('EOME inline ink history failed', error); new Notice('Impossibile modificare il tratto.'); });
+  };
+  undo.addEventListener('click', () => run('undo'));
+  redo.addEventListener('click', () => run('redo'));
   const down = (e: PointerEvent) => { controller.pointerDown(e); };
   const move = (e: PointerEvent) => { controller.pointerMove(e); };
   const up = (e: PointerEvent) => { controller.pointerEnd(e); };
@@ -176,6 +195,7 @@ export function connectInlineHandwriting(
   wrapper.addEventListener('pointercancel', up, true);
   return () => {
     controller.cancel();
+    toolbar.remove();
     wrapper.removeEventListener('pointerdown', down, true);
     wrapper.removeEventListener('pointermove', move, true);
     wrapper.removeEventListener('pointerup', up, true);
