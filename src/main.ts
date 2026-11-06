@@ -67,14 +67,14 @@ export default class MindmapPlugin extends Plugin {
         if (checking) return canOpen;
         if (!canOpen || !fence || !view.file) return false;
         const file = view.file;
-        void view.save().then(async () => {
+        void (view instanceof MarkdownView ? view.save() : Promise.resolve()).then(async () => {
           const current = findInlineFenceAtLine(await this.app.vault.read(file), fence.open);
           if (!current || current.content.trim() !== fence.content.trim()) {
             new Notice('Il blocco EOME è cambiato: riposiziona il cursore e riprova.');
             return;
           }
           openScopedEomeEditor(this, file, current);
-        }).catch(error => {
+        }).catch((error: unknown) => {
           console.error('EOME scoped editor startup failed', error);
           new Notice('Impossibile aprire la mappa EOME.');
         });
