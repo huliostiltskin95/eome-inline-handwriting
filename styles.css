@@ -2390,3 +2390,70 @@ body.is-mobile .eome-drawing-footer button,
   padding: 9px 16px;
   font-weight: 600;
 }
+
+/* Native tab layout: the chart needs an actual measured drawing surface.
+   Keep SVG controls accessible when the Cytoscape canvas cannot paint. */
+.eome-scoped-tab .eome-tab-render-status {
+  color: var(--text-error);
+  font-size: var(--font-ui-small);
+  padding: 0 4px;
+}
+.eome-scoped-tab .eome-tab-render-status:empty { display: none; }
+.eome-scoped-tab .eome-tab-diagram {
+  width: 100%;
+  min-height: 540px;
+  height: 100%;
+  position: relative;
+}
+.eome-scoped-tab .eome-tab-diagram > .mindmap-eome-wrapper {
+  width: 100%;
+  min-height: 540px;
+  height: 100%;
+  position: relative;
+}
+.eome-scoped-tab .mindmap-eome-canvas {
+  width: 100%;
+  height: 100%;
+}
+.eome-scoped-tab .eome-tab-fallback {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  padding: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+}
+.eome-scoped-tab .eome-tab-fallback[hidden] { display: none; }
+.eome-scoped-tab .eome-tab-fallback-caption {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.eome-scoped-tab .eome-tab-fallback-node {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+}
+.eome-scoped-tab .eome-tab-fallback-node img {
+  display: block;
+  max-width: min(360px, 72vw);
+  max-height: 210px;
+  object-fit: contain;
+  cursor: pointer;
+}
+.eome-scoped-tab .eome-tab-fallback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.eome-scoped-tab .eome-tab-fallback-actions button {
+  min-height: 40px;
+}
