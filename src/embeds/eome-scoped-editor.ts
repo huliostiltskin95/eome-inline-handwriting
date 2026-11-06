@@ -83,6 +83,10 @@ export class EomeScopedEditor extends Modal {
     const target = this.host.createDiv();
     const context = {
       sourcePath: this.file.path,
+      onInlineEomeSaved: (nextSource: string) => {
+        this.source = nextSource;
+        this.id = inlineMapId(nextSource);
+      },
       getSectionInfo: () => ({ lineStart: fence.open, lineEnd: fence.close }),
       addChild: (child: MarkdownRenderChild) => {
         this.children.push(child);
