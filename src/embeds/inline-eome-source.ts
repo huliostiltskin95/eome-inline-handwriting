@@ -56,7 +56,9 @@ export function insertHandwrittenNode(source: string, targetLine: number | null,
   const lines = source.trim() ? source.replace(/\r\n/g, '\n').split('\n') : [];
   if (targetLine === null) {
     if (lines.some(line => /^\s*[-*+]\s+/.test(line))) return null;
-    return '- ' + embed;
+    // Preserve the persistent map marker rather than replacing the whole fence.
+    lines.unshift('- ' + embed);
+    return lines.join('\n');
   }
   const { parseOutline } = requireOutline();
   const roots = parseOutline(source);
