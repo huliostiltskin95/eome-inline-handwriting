@@ -2213,3 +2213,21 @@ body.is-mobile .eome-drawing-footer button,
   pointer-events: stroke;
   cursor: pointer;
 }
+
+/* Isolated inline-map expansion and pen history controls. */
+.mindmap-eome-standalone-modal { min-width: min(90vw, 920px); }
+.mindmap-eome-standalone-modal .mindmap-eome-wrapper { min-height: 55vh; }
+.mindmap-eome-inline .mindmap-eome-open-button {
+  position: absolute; top: 8px; right: 56px; z-index: 1550;
+  min-width: 40px; min-height: 40px; border-radius: 9px;
+  background: var(--background-primary); border: 1px solid var(--background-modifier-border);
+}
+.mindmap-eome-ink-tools {
+  position: absolute; top: 8px; right: 104px; z-index: 1550;
+  display: flex; gap: 4px;
+}
+.mindmap-eome-ink-tools button {
+  min-width: 40px; min-height: 40px; font-size: 22px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px; background: var(--background-primary);
+}
