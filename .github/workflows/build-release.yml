@@ -1,16 +1,24 @@
-name: Build and publish BRAT prerelease
+name: Build and publish BRAT release
 
 on:
   push:
     branches:
       - main
+    paths:
+      - manifest.json
+      - .github/workflows/build-release.yml
   workflow_dispatch:
+
+# Only one publishing job may change the release assets at a time.
+concurrency:
+  group: eome-release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -24,24 +32,50 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
-      - name: Compile plugin
+      - name: Compile and verify plugin
         run: npm run build
-      - name: Verify BRAT assets
+      - name: Verify BRAT assets and version alignment
+        shell: bash
         run: |
+          set -euo pipefail
           test -s main.js
           test -s manifest.json
           test -s styles.css
-      - name: Create or update GitHub prerelease
+          node - <<'NODE'
+          const manifest = require('./manifest.json');
+          const pkg = require('./package.json');
+          if (manifest.version !== pkg.version) {
+            throw new Error('Release version mismatch: manifest ' + manifest.version + ' vs package ' + pkg.version);
+          }
+          NODE
+      - name: Publish or verify existing GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
-          VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("manifest.json")).version')"
-          if gh release view "$VERSION" > /dev/null 2>&1; then
-            gh release upload "$VERSION" main.js manifest.json styles.css --clobber
+          set -euo pipefail
+          VERSION="$(node -p "require('./manifest.json').version")"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists. Verifying BRAT assets."
+            ASSETS="$(gh release view "$VERSION" --json assets --jq '.assets[].name')"
+            for FILE in main.js manifest.json styles.css; do
+              if ! grep -Fxq "$FILE" <<<"$ASSETS"; then
+                echo "Adding missing release asset: $FILE"
+                gh release upload "$VERSION" "$FILE"
+              fi
+            done
           else
             gh release create "$VERSION" main.js manifest.json styles.css \
               --title "EOME Inline Handwriting $VERSION" \
-              --notes "Versione sperimentale: scrittura Apple Pencil direttamente nei nodi SVG. Non collaudata su hardware reale." \
+              --notes "Release for BRAT. Back up your vault and verify Pencil/BOOX behavior on a test map." \
               --prerelease \
               --target "$GITHUB_SHA"
           fi
+          ASSETS="$(gh release view "$VERSION" --json assets --jq '.assets[].name')"
+          for FILE in main.js manifest.json styles.css; do
+            grep -Fxq "$FILE" <<<"$ASSETS" || {
+              echo "::error::Release $VERSION is missing $FILE"
+              exit 1
+            }
+          done
+          echo "EOME $VERSION: release and all three BRAT assets verified."
