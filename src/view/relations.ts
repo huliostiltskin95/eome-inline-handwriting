@@ -27,6 +27,8 @@ export function relationGeometry(kind: RelationKind): RelationGeometry {
  * unambiguously and must first be given unique labels or SVG attachments.
  */
 export function relationNodeKey(app: App, file: TFile, node: OutlineNode): string {
+  const nodeId = /<!-- eome-node-id: ([a-z0-9-]{8,64}) -->/.exec(node.text)?.[1];
+  if (nodeId) return 'node:' + nodeId;
   const link = extractDrawingLink(node.text);
   if (link) {
     // Use the literal embed identity: Obsidian's link resolver can lag after

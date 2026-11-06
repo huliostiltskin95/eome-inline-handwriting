@@ -78,6 +78,51 @@ function pathCost(points: readonly RoutePoint[], obstacles: RouteNode[]): number
   return cost;
 }
 
+/** Penalize crossings against previously routed connections, but permit
+ * segments that only meet at a shared endpoint. This is a stable, bounded
+ * greedy optimization, not an expensive all-pairs graph search.
+ */
+function intersectionPenalty(a: RoutePoint, b: RoutePoint, c: RoutePoint, d: RoutePoint): number {
+  const ah = Math.abs(a.y - b.y) < 0.75;
+  const bh = Math.abs(c.y - d.y) < 0.75;
+  if (ah !== bh) {
+    const h1 = ah ? a : c, h2 = ah ? b : d;
+    const v1 = ah ? c : a, v2 = ah ? d : b;
+    const x = v1.x, y = h1.y;
+    const innerH = x > Math.min(h1.x, h2.x) + 0.75 && x < Math.max(h1.x, h2.x) - 0.75;
+    const innerV = y > Math.min(v1.y, v2.y) + 0.75 && y < Math.max(v1.y, v2.y) - 0.75;
+    return innerH && innerV ? 1 : 0;
+  }
+  if (ah && Math.abs(a.y - c.y) < 0.75) {
+    const overlap = Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x))
+      - Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x));
+    return overlap > 1 ? 0.15 : 0;
+  }
+  if (!ah && Math.abs(a.x - c.x) < 0.75) {
+    const overlap = Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y))
+      - Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y));
+    return overlap > 1 ? 0.15 : 0;
+  }
+  return 0;
+}
+
+function routeScore(points: RoutePoint[], obstacles: RouteNode[], routed: readonly RoutedRelation[]): number {
+  let crossings = 0;
+  for (let i = 1; i < points.length; i++) {
+    for (const route of routed) for (let j = 1; j < route.points.length; j++)
+      crossings += intersectionPenalty(points[i - 1], points[i], route.points[j - 1], route.points[j]);
+  }
+  return pathCost(points, obstacles) * 10000 + crossings * 550
+    + Math.max(0, points.length - 2) * 5 + polylineLength(points) * 0.015;
+}
+
+function chooseRoute(options: RoutePoint[][], obstacles: RouteNode[],
+  routed: readonly RoutedRelation[]): RoutePoint[] {
+  return options.reduce((best, candidate) =>
+    routeScore(candidate, obstacles, routed) < routeScore(best, obstacles, routed)
+      ? candidate : best);
+}
+
 /**
  * Endpoint anchors sit just outside the visible handwriting, never at the
  * centre of the glyph. A small buffer avoids arrowheads touching ink.
@@ -193,10 +238,17 @@ export function routeRelations(nodes: readonly RouteNode[], relations: readonly 
       // The visible link always leaves and enters horizontally at the outer
       // side of the SVG. When rows differ, one shared vertical stem joins
       // horizontal exits and never crosses the written words.
-      points = stem === undefined
-        ? (Math.abs(a.y - b.y) < 1 ? [a, b] :
-          [a, point((a.x + b.x) / 2, a.y), point((a.x + b.x) / 2, b.y), b])
-        : [a, point(stem, a.y), point(stem, b.y), b];
+      if (stem !== undefined) {
+        points = [a, point(stem, a.y), point(stem, b.y), b];
+      } else if (Math.abs(a.y - b.y) < 1) {
+        points = [a, b];
+      } else {
+        const options = [0.27, 0.38, 0.5, 0.62, 0.73].map(fraction => {
+          const x = round(a.x + (b.x - a.x) * fraction);
+          return [a, point(x, a.y), point(x, b.y), b];
+        });
+        points = chooseRoute(options, obstacles, paths);
+      }
     } else {
       // A detail leaves the bottom of its source, descends, then turns
       // once into the left side of the indented node below.
@@ -204,9 +256,22 @@ export function routeRelations(nodes: readonly RouteNode[], relations: readonly 
         && target.y - target.h / 2 > source.y + source.h / 2) {
         const start = point(source.x - source.w / 2 + 20, source.y + source.h / 2 + 7);
         const end = point(target.x - target.w / 2 - 7, target.y);
-        points = [start, point(start.x, end.y), end];
+        // A detail must descend first and then turn *right* into the
+        // indented child; choose only anchors left of its entry point.
+        const starts = [12, 20, 28, 36].map(offset =>
+          point(source.x - source.w / 2 + offset,
+            source.y + source.h / 2 + 7))
+          .filter(candidate => candidate.x < end.x - 5);
+        if (!starts.length)
+          starts.push(point(Math.min(end.x - 8, source.x - source.w / 2 + 12),
+            source.y + source.h / 2 + 7));
+        points = chooseRoute(starts.map(s => [s, point(s.x, end.y), end]), obstacles, paths);
       } else {
-        points = elbow(a, b, obstacles);
+        // Search both orthogonal orientations against *all* earlier routes.
+        // Retain the legacy detour for aligned endpoints.
+        points = Math.abs(a.x - b.x) < 1 || Math.abs(a.y - b.y) < 1
+          ? elbow(a, b, obstacles)
+          : chooseRoute([[a, point(a.x, b.y), b], [a, point(b.x, a.y), b]], obstacles, paths);
       }
     }
     points = points.filter((p, i) => i === 0 || !same(p, points[i - 1]));

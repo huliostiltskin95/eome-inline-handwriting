@@ -21,6 +21,8 @@ import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRel
 import { routeRelations, type RouteNode } from '../view/relations-routing';
 import { appendRelationGeometry } from '../view/relations-overlay';
 import { isInlineMindmapSource } from './inline-eome-source';
+import { inlineMapId, outlineWithoutMapMarker, INLINE_MAPS_FIELD } from './inline-eome-identity';
+import { normalizeRelations } from '../view/relations';
 import {
   addInlineDrawing,
   showInlineCreateMenu, showInlineArrowMenu,
@@ -164,7 +166,8 @@ async function renderOverlays(
   wrapper: HTMLElement,
   cy: cytoscape.Core,
   flat: OutlineNode[],
-  sizeMap: Map<number, { w: number; h: number }>
+  sizeMap: Map<number, { w: number; h: number }>,
+  inline = false
 ): Promise<void> {
   wrapper.querySelectorAll('[data-mindmap-eome-overlay]').forEach((overlay) => overlay.remove());
 
@@ -174,7 +177,7 @@ async function renderOverlays(
   const bg = css.getPropertyValue('--background-primary').trim() || '#fff';
   const zoom = cy.zoom();
 
-  renderHeadingFrames(wrapper, cy, parseHeadingSections(await plugin.app.vault.read(file)), sizeMap, {
+  if (!inline) renderHeadingFrames(wrapper, cy, parseHeadingSections(await plugin.app.vault.read(file)), sizeMap, {
     attributeName: 'mindmapEomeOverlay',
   });
 
@@ -320,11 +323,18 @@ export async function renderMindmapEomeEmbed(
     return;
   }
 
-  const markdown = inline ? source : await plugin.app.vault.read(file);
+  const markdown = inline ? outlineWithoutMapMarker(source) : await plugin.app.vault.read(file);
   const explicitConnections = inline || hasExplicitRelationSchema(plugin.app, file);
   // A fenced map may only draw links whose endpoints belong to that fence.
   // The host note can contain multiple maps and unrelated YAML metadata.
-  const allRelations = explicitConnections ? readRelations(plugin.app, file) : [];
+  const mapId = inline ? inlineMapId(source) : null;
+  const scoped = mapId
+    ? plugin.app.metadataCache.getFileCache(file)?.frontmatter?.[INLINE_MAPS_FIELD] : null;
+  const maps = scoped && typeof scoped === 'object' && !Array.isArray(scoped)
+    ? scoped as Record<string, unknown> : {};
+  const allRelations = inline && mapId
+    ? normalizeRelations(maps[mapId])
+    : (explicitConnections ? readRelations(plugin.app, file) : []);
   const nodeKeys = new Set(flattenOutline(parseOutline(markdown)).map(node => relationNodeKey(plugin.app, file, node)));
   const relations = inline
     ? allRelations.filter(relation => nodeKeys.has(relation.source) && nodeKeys.has(relation.target))
@@ -481,7 +491,7 @@ export async function renderMindmapEomeEmbed(
     cy.fit(cy.elements(), 28);
     cy.center(cy.elements());
     const redraw = async (): Promise<void> => {
-      await renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap);
+      await renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap, inline);
       if (explicitConnections && wrapper.isConnected && !cy.destroyed()) {
         renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations,
           inlineContext ? (relation, position) =>
