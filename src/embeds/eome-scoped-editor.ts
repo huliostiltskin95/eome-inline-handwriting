@@ -310,7 +310,6 @@ export class EomeScopedEditor extends ItemView {
     };
     const observer = new MutationObserver(updateBackup);
     observer.observe(target, { childList: true, subtree: true });
-    this.diagramObserver?.disconnect();
     this.diagramObserver = observer;
     try {
       await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
