@@ -5,7 +5,9 @@ import {
 import type MindmapPlugin from '../main';
 import { inlineMapId, outlineWithoutMapMarker } from './inline-eome-identity';
 import { parseOutline } from '../utils/outline';
-import { createFirstInlineDrawing } from './inline-eome-actions';
+import { createFirstInlineDrawing, addInlineDrawing, editInlineDrawing } from './inline-eome-actions';
+import { extractDrawingLink } from '../drawing/drawing-link';
+import type { OutlineNode } from '../utils/outline';
 import {
   findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById,
   type InlineEomeFence
@@ -28,6 +30,9 @@ interface ScopedViewState {
  */
 export class EomeScopedEditor extends ItemView {
   private host: HTMLElement | null = null;
+  private status: HTMLElement | null = null;
+  private backup: HTMLElement | null = null;
+  private diagramObserver: MutationObserver | null = null;
   private firstNodeButton: HTMLButtonElement | null = null;
   private creatingFirstNode = false;
   private children: MarkdownRenderChild[] = [];
@@ -91,6 +96,7 @@ export class EomeScopedEditor extends ItemView {
       cls: 'eome-scoped-instructions',
       text: 'Primo nodo: editor avanzato obbligatorio. Per i successivi, seleziona un nodo e usa —+ oppure └+.'
     });
+    this.status = this.contentEl.createDiv({ cls: 'eome-tab-render-status' });
     this.host = this.contentEl.createDiv({ cls: 'eome-scoped-editor-host' });
     this.registerEvent(this.app.vault.on('modify', changed => {
       if (!this.file) return;
@@ -151,6 +157,80 @@ export class EomeScopedEditor extends ItemView {
     return findInlineFenceByContent(markdown, this.source);
   }
 
+  private renderBackup(fence: InlineEomeFence): void {
+    if (!this.host || !this.file) return;
+    const file = this.file;
+    const roots = parseOutline(outlineWithoutMapMarker(fence.content));
+    const flatten = (nodes: OutlineNode[]): OutlineNode[] =>
+      nodes.reduce((all, node) => all.concat(node, flatten(node.children)), [] as OutlineNode[]);
+    const nodes = flatten(roots);
+    this.backup = this.host.createDiv({ cls: 'eome-tab-fallback' });
+    if (!nodes.length) {
+      this.backup.hidden = true;
+      return;
+    }
+    this.backup.createDiv({
+      cls: 'eome-tab-fallback-caption',
+      text: 'Nodi della mappa · seleziona una parola per modificarla o aggiungere un collegamento'
+    });
+    const context = {
+      sourcePath: file.path,
+      getSectionInfo: () => ({ lineStart: fence.open, lineEnd: fence.close }),
+      onInlineEomeSaved: (next: string) => {
+        this.source = next;
+        this.mapId = inlineMapId(next);
+        this.scheduleRefresh(100);
+      }
+    } as unknown as MarkdownPostProcessorContext;
+    const editContext = {
+      plugin: this.plugin,
+      file,
+      source: fence.content,
+      container: this.host,
+      ctx: context
+    };
+    for (const node of nodes) {
+      const row = this.backup.createDiv({ cls: 'eome-tab-fallback-node' });
+      const drawingLink = extractDrawingLink(node.text);
+      const destination = drawingLink
+        ? this.app.metadataCache.getFirstLinkpathDest(drawingLink, file.path)
+        : null;
+      const fallbackName = drawingLink?.split('/').pop();
+      const attachment = destination instanceof TFile ? destination
+        : this.app.vault.getFiles().find(f => f.extension.toLowerCase() === 'svg' &&
+          (f.path === drawingLink || f.name === fallbackName));
+      if (attachment) {
+        const image = row.createEl('img', {
+          attr: {
+            src: this.app.vault.getResourcePath(attachment),
+            alt: drawingLink ?? 'Nodo manoscritto'
+          }
+        });
+        image.addEventListener('click', () => {
+          void editInlineDrawing(editContext, roots, node);
+        });
+      } else {
+        row.createSpan({ text: drawingLink ?? node.text });
+      }
+      const actions = row.createDiv({ cls: 'eome-tab-fallback-actions' });
+      const edit = actions.createEl('button', { text: 'Modifica nodo' });
+      edit.addEventListener('click', () => {
+        void editInlineDrawing(editContext, roots, node).catch(error => {
+          console.error('EOME node edit failed:', error);
+          new Notice('Editor nodo: ' + (error instanceof Error ? error.message : String(error)));
+        });
+      });
+      const add = (label: string, kind: 'figlio' | 'dettaglio'): void => {
+        const button = actions.createEl('button', { text: label });
+        button.addEventListener('click', () => {
+          void addInlineDrawing(editContext, roots, node.line, kind, 'none');
+        });
+      };
+      add('—+ Parallelo', 'figlio');
+      add('└+ Dettaglio', 'dettaglio');
+    }
+  }
+
   private unloadRenderedChildren(): void {
     for (const child of this.children) this.removeChild(child);
     this.children = [];
@@ -163,7 +243,8 @@ export class EomeScopedEditor extends ItemView {
     if (this.closed || generation !== this.renderGeneration || !this.host) return;
     const fence = this.locate(markdown);
     if (!fence) {
-      this.host.setText('Blocco EOME non trovato o modificato fuori dalla mappa. Nessun altro contenuto è stato alterato.');
+      this.status?.setText('Blocco EOME non trovato o modificato fuori dalla mappa. Nessun altro contenuto è stato alterato.');
+      this.host.setText('Blocco EOME non identificato. Torna alla nota e apri nuovamente la mappa.');
       return;
     }
     const selectedLine = this.host.querySelector<HTMLElement>(
@@ -181,7 +262,9 @@ export class EomeScopedEditor extends ItemView {
     }
     this.unloadRenderedChildren();
     this.host.empty();
-    const target = this.host.createDiv();
+    this.status?.setText('');
+    this.renderBackup(fence);
+    const target = this.host.createDiv({ cls: 'eome-tab-diagram' });
     const context = {
       sourcePath: this.file.path,
       onInlineEomeSaved: (nextSource: string) => {
@@ -211,7 +294,30 @@ export class EomeScopedEditor extends ItemView {
       this.selectionObserver.observe(target, { childList: true, subtree: true });
       restore();
     }
-    await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
+    // The native preview must never go blank if Cytoscape/MarkdownRender fails.
+    // Keep a usable SVG/editor fallback until overlays have actually appeared.
+    const updateBackup = (): void => {
+      if (!this.backup || this.closed || generation !== this.renderGeneration) return;
+      const overlays = target.querySelectorAll('.mindmap-eome-overlay');
+      this.backup.hidden = overlays.length > 0;
+    };
+    const observer = new MutationObserver(updateBackup);
+    observer.observe(target, { childList: true, subtree: true });
+    this.diagramObserver?.disconnect();
+    this.diagramObserver = observer;
+    try {
+      await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
+      updateBackup();
+      if (target.querySelector('.mindmap-eome-error')) {
+        this.status?.setText('Il rendering grafico non è disponibile. I nodi restano accessibili qui sotto.');
+      }
+    } catch (error) {
+      console.error('EOME native tab map render failed:', error);
+      this.status?.setText('Errore di rendering: ' +
+        (error instanceof Error ? error.message : String(error)) +
+        '. Puoi comunque aprire e modificare gli SVG qui sotto.');
+      target.empty();
+    }
   }
 
   async onClose(): Promise<void> {
@@ -221,9 +327,13 @@ export class EomeScopedEditor extends ItemView {
     this.refreshTimer = null;
     this.selectionObserver?.disconnect();
     this.selectionObserver = null;
+    this.diagramObserver?.disconnect();
+    this.diagramObserver = null;
     this.unloadRenderedChildren();
     this.contentEl.empty();
     this.host = null;
+    this.backup = null;
+    this.status = null;
     this.firstNodeButton = null;
     // The source Markdown preview stays in its own tab, like a PDF embed.
     // A rerender accounts for SVG-only modifications without changing prose.
