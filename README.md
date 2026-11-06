@@ -13,11 +13,37 @@ Questa versione aggiunge **scrittura a mano direttamente nei nodi della mappa**,
 
 Il plugin ha un **ID diverso dall'originale**, quindi non ne sovrascrive i file. Per evitare che entrambi cerchino di gestire le stesse note, si consiglia di **disattivare il plugin EOME originale durante le prove**.
 
-## Prossimo aggiornamento: specifica dei collegamenti (non ancora implementata)
+## Specifica tecnica dei collegamenti
 
 Il sistema di relazioni e routing della versione 0.2.8 è **provvisorio**. Le nuove regole richieste sono: **figlio/conseguenza = linea orizzontale**; **dettaglio/causa = L ortogonale**; frecce personalizzabili su **ogni singola relazione**, indipendentemente dal tipo. Le relazioni sono stabilite **tra coppie esplicite di nodi**, non dedotte dalla loro posizione o dall'ordine dell'outline. Le linee possono condividere dorsali dove questo migliora la leggibilità.
 
-La [specifica funzionale completa](docs/specs/relazioni-e-collegamenti.md) è il documento di riferimento per il prossimo aggiornamento. **Non descrive funzionalità già presenti nella release BRAT 0.2.8.**
+La [specifica funzionale completa](docs/specs/relazioni-e-collegamenti.md) resta il documento di riferimento; le funzioni implementate sono descritte nelle sezioni dedicate alle release.
+
+## 0.3.4 — Una mappa scrivibile dentro la nota, come un blocco Mermaid
+
+Ora puoi inserire una mappa manoscritta **nel corpo della stessa nota Obsidian**, senza creare prima un'altra nota Markdown. In modalità lettura (o Live Preview, se il blocco viene renderizzato) basta creare un blocco vuoto:
+
+````markdown
+```mindmap-eome
+```
+````
+
+EOME mostra «+ Crea la prima parola». Ogni nuovo nodo è salvato come **SVG editabile**; le corrispondenti righe di riferimento vengono inserite *automaticamente nel blocco di codice stesso*. Dopo qualche aggiunta, il contenuto sorgente somiglierà a:
+
+````markdown
+```mindmap-eome
+- ![[Parola1.svg]]
+  - ![[Parola2.svg]]
+```
+````
+
+Seleziona la grafia, premi **+**, scegli «Parallelo —» oppure «A L └» e l'eventuale freccia. Scrivi direttamente sullo SVG con penna o mouse. Il doppio tocco apre l'editor grafico espanso. Le relazioni sono memorizzate nella **frontmatter YAML della stessa nota**, mentre i tratti restano in allegati SVG, non in dati raster.
+
+Nell'editor espanso i comandi ora sono **«Salva + parallelo —»** e **«Salva + L └»**. Dalla mappa completa puoi scegliere «Frecce dei collegamenti...» nel menu contestuale di un nodo, senza dover centrare un tratto sottile. Dopo l'aggiunta di un nodo, EOME aggiorna l'outline prima di salvare il collegamento, riducendo i rapporti mancanti.
+
+**Retrocompatibilità:** un blocco `mindmap-eome` con *solo* il percorso di un'altra nota Markdown continua a funzionare come anteprima, non come superficie modificabile. La nuova modalità interattiva richiede un blocco vuoto o un elenco di nodi SVG. Il supporto del rendering in Live Preview e i gesti Apple Pencil devono essere verificati su un iPad reale.
+
+**Sicurezza:** prima di modificare il codice della nota EOME controlla che il corpo originale del blocco corrisponda; in presenza di più blocchi identici non distinguibili rifiuta l'operazione anziché rischiare di sovrascrivere il contenuto sbagliato.
 
 ## Solo input grafico: penna oppure mouse (0.3.3)
 
@@ -92,7 +118,7 @@ npm test
 npm run build
 ```
 
-Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.3` con i file richiesti da BRAT.
+Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.4` con i file richiesti da BRAT.
 
 ## Provenienza e licenza
 

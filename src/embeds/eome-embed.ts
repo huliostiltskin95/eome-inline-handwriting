@@ -18,6 +18,12 @@ import { arrangeTopLevelTrees } from '../view/tree-layout';
 import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRelation } from '../view/relations';
 import { routeRelations, type RouteNode } from '../view/relations-routing';
 import { appendRelationGeometry } from '../view/relations-overlay';
+import { isInlineMindmapSource } from './inline-eome-source';
+import {
+  addInlineDrawing,
+  showInlineCreateMenu, showInlineArrowMenu,
+  editInlineDrawing, connectInlineHandwriting
+} from './inline-eome-actions';
 
 cytoscape.use(dagre);
 
@@ -218,7 +224,8 @@ function renderEmbeddedRelations(
   plugin: MindmapPlugin, file: TFile, wrapper: HTMLElement,
   cy: cytoscape.Core, flat: OutlineNode[],
   sizes: Map<number, { w: number; h: number }>,
-  relations: EomeRelation[]
+  relations: EomeRelation[],
+  onRelationClick?: (relation: EomeRelation, position: { x: number; y: number }) => void
 ): void {
   wrapper.querySelector('svg.eome-relations-layer')?.remove();
   if (!relations.length) return;
@@ -259,6 +266,24 @@ function renderEmbeddedRelations(
   svg.setAttribute('height', String(h));
   const color = doc.defaultView?.getComputedStyle(wrapper).getPropertyValue('--text-normal').trim() || '#424242';
   appendRelationGeometry(svg, routes, color);
+  if (onRelationClick) {
+    for (const route of routes.paths) {
+      const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.classList.add('eome-relation-hit');
+      path.setAttribute('d', route.points.map((p, i) =>
+        (i ? 'L' : 'M') + p.x + ',' + p.y).join(' '));
+      path.setAttribute('stroke', 'transparent');
+      path.setAttribute('stroke-width', '20');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('pointer-events', 'stroke');
+      path.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        onRelationClick(route.relation, { x: event.clientX, y: event.clientY });
+      });
+      svg.appendChild(path);
+    }
+  }
   wrapper.appendChild(svg);
 }
 
@@ -276,22 +301,27 @@ export async function renderMindmapEomeEmbed(
   el.classList.add('mindmap-eome-host');
   el.parentElement?.classList.add('mindmap-eome-codeblock');
 
-  const fileName = getEmbedFileName(source);
-
-  if (!fileName) {
-    renderError(el, 'mindmap-eome: put exactly one Markdown filename in the code block.');
+  // Unlike the former read-only preview, a code fence containing an outline
+  // now owns the map *inside the same Markdown note*. A single path still
+  // keeps the old linked-note preview working for existing vaults.
+  const inline = isInlineMindmapSource(source);
+  const fileName = inline ? null : getEmbedFileName(source);
+  if (!inline && !fileName) {
+    renderError(el, 'mindmap-eome: usa un elenco manoscritto oppure il percorso di una nota .md.');
     return;
   }
-
-  const file = plugin.app.metadataCache.getFirstLinkpathDest(fileName, ctx.sourcePath);
+  const file = inline
+    ? plugin.app.vault.getAbstractFileByPath(ctx.sourcePath)
+    : plugin.app.metadataCache.getFirstLinkpathDest(fileName!, ctx.sourcePath);
   if (!(file instanceof TFile) || file.extension !== 'md') {
-    renderError(el, `mindmap-eome: file not found: ${fileName}`);
+    renderError(el, 'mindmap-eome: nota Markdown non trovata.');
     return;
   }
 
-  const markdown = await plugin.app.vault.read(file);
-  const explicitConnections = hasExplicitRelationSchema(plugin.app, file);
+  const markdown = inline ? source : await plugin.app.vault.read(file);
+  const explicitConnections = inline || hasExplicitRelationSchema(plugin.app, file);
   const relations = explicitConnections ? readRelations(plugin.app, file) : [];
+  const inlineContext = inline ? { plugin, file, source, container: el, ctx } : null;
   if (!isOutlineCompatible(markdown)) {
     renderError(el, `mindmap-eome: ${file.name} is not a compatible mindmap outline.`);
     return;
@@ -300,31 +330,77 @@ export async function renderMindmapEomeEmbed(
   const roots = parseOutline(markdown);
   const flat = flattenOutline(roots);
   if (flat.length === 0) {
-    renderError(el, `mindmap-eome: ${file.name} has no outline nodes.`);
+    if (!inlineContext) {
+      renderError(el, `mindmap-eome: ${file.name} has no outline nodes.`);
+      return;
+    }
+    el.empty();
+    const start = el.createDiv({ cls: 'mindmap-eome-empty' });
+    start.createEl('p', { text: 'Mappa manoscritta vuota' });
+    const add = start.createEl('button', { text: '+ Crea la prima parola' });
+    add.addEventListener('click', () => {
+      void addInlineDrawing(inlineContext, [], null, 'figlio', 'none');
+    });
     return;
   }
 
   el.empty();
-  const wrapper = el.createDiv({ cls: 'mindmap-eome-wrapper' });
+  const wrapper = el.createDiv({ cls: inline
+    ? 'mindmap-eome-wrapper mindmap-eome-inline'
+    : 'mindmap-eome-wrapper' });
   // Registered before anything renders. Markdown rendered into this embed
   // must be owned by something that dies with the embed; the plugin instance
   // lives for the whole session and would retain every embed ever drawn.
   const child = new MarkdownRenderChild(wrapper);
   ctx.addChild(child);
   const canvas = wrapper.createDiv({ cls: 'mindmap-canvas mindmap-eome-canvas' });
-  const openButton = wrapper.createEl('button', {
-    cls: 'mindmap-eome-open-button',
-    attr: { 'aria-label': 'Open mindmap' },
-  });
-  setIcon(openButton, 'external-link');
-  openButton.addEventListener('click', (event) => {
-    void (async () => {
+  let selectedLine: number | null = null;
+  let stopInk: (() => void) | null = null;
+  if (inlineContext) {
+    const addButton = wrapper.createEl('button', {
+      cls: 'mindmap-eome-inline-add',
+      attr: { 'aria-label': 'Aggiungi nodo nella mappa' },
+    });
+    setIcon(addButton, 'plus');
+    addButton.setAttribute('title', 'Nuovo nodo parallelo o a L');
+    addButton.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      await plugin.openMindmapReplacingLeaf(file);
-  
-    })();
-  });
+      showInlineCreateMenu(inlineContext, roots, selectedLine, {
+        x: event.clientX, y: event.clientY
+      });
+    });
+    wrapper.addEventListener('click', event => {
+      const target = event.target instanceof Element ? event.target : null;
+      const overlay = target?.closest<HTMLElement>('.mindmap-eome-overlay[data-node-line]');
+      if (!overlay) return;
+      const line = Number(overlay.dataset.nodeLine);
+      if (!Number.isFinite(line)) return;
+      selectedLine = line;
+      wrapper.querySelectorAll('.mindmap-eome-overlay').forEach(node =>
+        node.classList.toggle('selected', node === overlay));
+    });
+    wrapper.addEventListener('dblclick', event => {
+      const target = event.target instanceof Element ? event.target : null;
+      const overlay = target?.closest<HTMLElement>('.mindmap-eome-overlay[data-node-line]');
+      const line = Number(overlay?.dataset.nodeLine);
+      const node = flat.find(n => n.line === line);
+      if (!node || !inlineContext) return;
+      event.preventDefault();
+      void editInlineDrawing(inlineContext, roots, node);
+    });
+  } else {
+    const openButton = wrapper.createEl('button', {
+      cls: 'mindmap-eome-open-button',
+      attr: { 'aria-label': 'Open mindmap' },
+    });
+    setIcon(openButton, 'external-link');
+    openButton.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      void plugin.openMindmapReplacingLeaf(file);
+    });
+  }
 
   const sizeMap = await measureNodes(plugin, child, file, flat);
   const elements = buildElements(flat, sizeMap);
@@ -373,14 +449,25 @@ export async function renderMindmapEomeEmbed(
     arrangeTopLevelTrees(cy, roots, sizeMap, 'vertical', 160);
     cy.fit(cy.elements(), 28);
     cy.center(cy.elements());
-    void renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap).then(() => {
+    const redraw = async (): Promise<void> => {
+      await renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap);
       if (explicitConnections && wrapper.isConnected && !cy.destroyed()) {
-        renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations);
+        renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations,
+          inlineContext ? (relation, position) =>
+            showInlineArrowMenu(inlineContext, relation, position) : undefined);
+      }
+    };
+    void redraw().then(() => {
+      if (inlineContext && !stopInk) {
+        stopInk = connectInlineHandwriting(inlineContext, wrapper, flat, redraw);
       }
     });
   });
 
   cy.layout(layoutOptions).run();
 
-  child.onunload = () => cy.destroy();
+  child.onunload = () => {
+    stopInk?.();
+    cy.destroy();
+  };
 }

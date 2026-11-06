@@ -83,6 +83,40 @@ function showRelationEditMenu(view: MindmapView, rel: EomeRelation,
   menu.showAtMouseEvent(event);
 }
 
+/** Accessible alternative to touching a narrow edge on iPad:
+ * select a handwritten node, then configure its outgoing/incoming arrows
+ * using the ordinary Obsidian context menus.
+ */
+export function showNodeRelationArrowsMenu(view: MindmapView, node: OutlineNode,
+  position: { x: number; y: number }): void {
+  const file = view.file;
+  if (!file) return;
+  const key = relationNodeKey(view.app, file, node);
+  const links = view.relations.filter(rel => rel.source === key || rel.target === key);
+  const menu = new Menu();
+  if (!links.length) {
+    menu.addItem(item => item.setTitle('Nessun collegamento esplicito').setDisabled(true));
+  } else {
+    for (const relation of links) {
+      const label = relation.source === key ? 'Uscita → ' + relation.target : 'Ingresso ← ' + relation.source;
+      menu.addItem(item => item.setTitle(label).onClick(() => {
+        const options = new Menu();
+        const modes: Array<[RelationArrowMode, string]> = [
+          ['none', 'Nessuna freccia'],
+          ['start', 'Freccia all’inizio'],
+          ['end', 'Freccia alla fine'],
+          ['both', 'Frecce a entrambe le estremità']
+        ];
+        for (const [arrow, title] of modes)
+          options.addItem(option => option.setTitle(title)
+            .onClick(() => { void view.changeRelationArrow(relation.id, arrow); }));
+        options.showAtPosition(position, view.wrapper.ownerDocument);
+      }));
+    }
+  }
+  menu.showAtPosition(position, view.wrapper.ownerDocument);
+}
+
 function uniqueRenderedNodes(view: MindmapView): RouteNode[] {
   const file = view.file, cy = view.cy;
   if (!file || !cy) return [];

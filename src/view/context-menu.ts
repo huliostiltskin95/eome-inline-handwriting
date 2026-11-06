@@ -5,6 +5,7 @@ import { editNodeContent } from '../drawing/drawing-actions';
 import { extractDrawingLink } from '../drawing/drawing-link';
 import { resolveExcalidrawEmbed } from '../drawing/excalidraw-integration';
 import { appendNewNodeChoices } from '../ui/menus/handwritten-node-menu';
+import { showNodeRelationArrowsMenu } from './relations-overlay';
 
 /** EOME is an ink-only canvas. Old text nodes are displayed in read-only
  * mode; the menu contains no operations opening a text input or adding
@@ -40,6 +41,13 @@ export function showNodeContextMenu(
     }
     // First choose geometry, then an optional arrow at either endpoint.
     appendNewNodeChoices(menu, view, targetNode, { x: event.clientX, y: event.clientY });
+    if (Array.isArray(view.relations) && view.relations.length > 0) {
+      menu.addItem(item => item
+        .setTitle('Frecce dei collegamenti...')
+        .setIcon('move-horizontal')
+        .onClick(() => showNodeRelationArrowsMenu(view, targetNode,
+          { x: event.clientX, y: event.clientY })));
+    }
     menu.addSeparator();
     menu.addItem(item => item
       .setTitle('Elimina nodo')

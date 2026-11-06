@@ -135,3 +135,12 @@ Per accettare il risultato:
 - I blocchi `mindmap-eome` che contengono il percorso della nota Markdown mostrano un'anteprima vettoriale read-only dei collegamenti espliciti; l'editing avviene aprendo la mappa completa.
 - Lo strumento Collega accetta trascinamento sia con penna sia con mouse; la scrittura diretta su SVG accetta i medesimi dispositivi.
 - Limiti: per l'ancoraggio viene usato il bordo dell'immagine SVG, non il contorno preciso di ogni tratto; resta da collaudare il comportamento nell'interfaccia iPad e minimizzare globalmente gli incroci.
+
+
+## Attuazione 0.3.4 — Mappa operativa nel blocco della stessa nota
+
+Il processore Markdown `mindmap-eome` accetta ora (oltre al vecchio percorso `.md` usato come anteprima) anche un outline SVG al proprio interno, eventualmente vuoto. Il blocco viene renderizzato automaticamente in una mappa **interattiva** nel documento ospitante: selezione del nodo, creazione in-place di altri SVG paralleli o a L, disegno con Apple Pencil o mouse, modifica delle estremità delle frecce tramite menu. I tratti restano in allegati SVG, le relazioni nella frontmatter YAML della nota contenente il blocco. La modifica dei blocchi richiede corrispondenza esatta con il contenuto precedente, per proteggere note con più blocchi. I blocchi con riferimento a file esterno restano anteprime read-only.
+
+La finestra espansa mostra «Salva + parallelo» e «Salva + L», e non più «Salva + figlio»/«Salva + fratello». Dalla vista principale si possono configurare le frecce attraverso il menu contestuale del nodo. Il salvataggio di nuovi collegamenti aspetta la sincronizzazione dell'outline per ridurre le omissioni.
+
+**Limiti residui:** da collaudare su hardware iPad reale la funzionalità in Live Preview e la ri-renderizzazione dopo la scrittura; il motore non garantisce ancora l'eliminazione globale di tutti gli incroci.

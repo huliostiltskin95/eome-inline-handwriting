@@ -184,8 +184,11 @@ async function editDrawingAttachment(
         new Notice('Drawing saved. Could not locate its node to create a related node.');
         return;
       }
+      // The full-screen editor never creates an unlinked sibling: both
+      // actions create a new SVG connected to the current drawing. Arrowheads
+      // are adjusted afterwards in the main map using the relation menu.
       const added = await createBlankRelativeDrawing(
-        view, matches[0], result.next, result.next === 'child' ? 'figlio' : undefined
+        view, matches[0], 'child', result.next === 'parallel' ? 'figlio' : 'dettaglio'
       );
       if (!added) return;
       // Open the next handwriting sheet directly. No intermediate trip back to
@@ -335,11 +338,22 @@ async function createBlankRelativeDrawing(
       new Notice('Drawing saved as ' + attachment.path + ', but the node could not be inserted.');
       return null;
     }
-    const newNode = view.getFlatNodes().find((candidate) => candidate.text === embed);
-    if (newNode) {
-      view.selectNode(newNode.line);
-      if (kind) await view.addRelation(liveTarget, newNode, kind, arrow);
+    // Outline updates may be scheduled through the Obsidian editor and take
+    // another frame to reach the view. Do not silently skip the relation when
+    // the newly inserted SVG is not visible on the first immediate read.
+    await view.reloadDataIncremental();
+    let newNode = view.getFlatNodes().find(candidate => candidate.text === embed);
+    if (!newNode) {
+      await new Promise<void>(resolve => window.requestAnimationFrame(() => resolve()));
+      await view.reloadDataIncremental();
+      newNode = view.getFlatNodes().find(candidate => candidate.text === embed);
     }
+    if (!newNode) {
+      new Notice('Nodo SVG inserito, ma la relazione non è stata salvata: riapri la mappa.');
+      return { attachment, embed };
+    }
+    view.selectNode(newNode.line);
+    if (kind) await view.addRelation(liveTarget, newNode, kind, arrow);
     return { attachment, embed };
   } catch (error) {
     console.error('Could not create an empty drawing node:', error);

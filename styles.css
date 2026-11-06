@@ -2166,3 +2166,50 @@ body.is-mobile .eome-drawing-footer button,
 .mindmap-eome-wrapper .mindmap-eome-overlay {
   z-index: 10;
 }
+
+/* v0.3.4 — true interactive ink inside a mindmap-eome Markdown fence.
+ * Only the self-contained outline variant becomes interactive. */
+.mindmap-eome-inline .mindmap-eome-overlay {
+  pointer-events: auto !important;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: crosshair;
+}
+.mindmap-eome-inline .mindmap-eome-overlay.selected {
+  outline: 1px dashed var(--interactive-accent);
+  outline-offset: 4px;
+}
+.mindmap-eome-inline-add {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1550;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 9px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+.mindmap-eome-empty {
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 9px;
+}
+.mindmap-eome-empty button {
+  min-height: 42px;
+}
+.mindmap-eome-inline svg.eome-relations-layer .eome-relation-hit {
+  pointer-events: stroke;
+  cursor: pointer;
+}

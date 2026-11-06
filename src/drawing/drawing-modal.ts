@@ -10,7 +10,7 @@ import { canonicalizeDrawing } from './drawing-changes';
 
 export interface DrawingModalResult {
   items: ExportedDrawingItem[];
-  next?: 'child' | 'sibling';
+  next?: 'parallel' | 'elbow';
 }
 
 export function openDrawingModal(
@@ -140,19 +140,19 @@ class DrawingModal extends Modal {
     const nextButtons: HTMLButtonElement[] = [];
     if (this.allowRelatedNodes) {
       const addChildButton = footer.createEl('button', {
-        text: 'Salva + figlio',
+        text: 'Salva + parallelo —',
         cls: 'eome-drawing-followup'
       });
       const addSiblingButton = footer.createEl('button', {
-        text: 'Salva + fratello',
+        text: 'Salva + L └',
         cls: 'eome-drawing-followup'
       });
       for (const button of [addChildButton, addSiblingButton]) {
         button.disabled = true;
         nextButtons.push(button);
       }
-      addChildButton.addEventListener('click', () => this.commitSave('child'));
-      addSiblingButton.addEventListener('click', () => this.commitSave('sibling'));
+      addChildButton.addEventListener('click', () => this.commitSave('parallel'));
+      addSiblingButton.addEventListener('click', () => this.commitSave('elbow'));
     }
 
     this.statusEl = status;
@@ -239,7 +239,7 @@ class DrawingModal extends Modal {
     }
   }
 
-  private commitSave(next?: 'child' | 'sibling'): void {
+  private commitSave(next?: 'parallel' | 'elbow'): void {
     if (!this.board || this.settled) return;
 
     let items: ExportedDrawingItem[];
