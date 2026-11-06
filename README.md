@@ -13,6 +13,12 @@ Questa versione aggiunge **scrittura a mano direttamente nei nodi della mappa**,
 
 Il plugin ha un **ID diverso dall'originale**, quindi non ne sovrascrive i file. Per evitare che entrambi cerchino di gestire le stesse note, si consiglia di **disattivare il plugin EOME originale durante le prove**.
 
+## Prossimo aggiornamento: specifica dei collegamenti (non ancora implementata)
+
+Il sistema di relazioni e routing della versione 0.2.8 è **provvisorio**. Le nuove regole richieste sono: **figlio/conseguenza = linea orizzontale**; **dettaglio/causa = L ortogonale**; frecce personalizzabili su **ogni singola relazione**, indipendentemente dal tipo. Le relazioni sono stabilite **tra coppie esplicite di nodi**, non dedotte dalla loro posizione o dall'ordine dell'outline. Le linee possono condividere dorsali dove questo migliora la leggibilità.
+
+La [specifica funzionale completa](docs/specs/relazioni-e-collegamenti.md) è il documento di riferimento per il prossimo aggiornamento. **Non descrive funzionalità già presenti nella release BRAT 0.2.8.**
+
 ## Modalità pen-first (0.2.4)
 
 Il plugin funziona dentro Obsidian: apri una nota Markdown e scegli **Mindmap view of this file** dal menu della nota. La modalità Penna è **attiva per impostazione predefinita**.
