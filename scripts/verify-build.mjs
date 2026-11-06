@@ -79,17 +79,26 @@ async function verifyTopLevelLoadAndOnload() {
     registerView() {}
     registerMarkdownCodeBlockProcessor() {}
     addCommand() {}
+    addSettingTab() {}
+    async loadData() { return {}; }
+    async saveData() {}
     registerEvent() {}
     register() {}
   }
 
   class TextFileViewStub {}
   class ModalStub {}
+  class PluginSettingTabStub {
+    constructor() { this.containerEl = { empty() {} }; }
+  }
+  class SettingStub {}
 
   const obsidianStub = Object.freeze({
     Plugin: PluginStub,
     TextFileView: TextFileViewStub,
     Modal: ModalStub,
+    PluginSettingTab: PluginSettingTabStub,
+    Setting: SettingStub,
     Platform: Object.freeze({ isDesktopApp: false, isMobileApp: true, isMacOS: false }),
     normalizePath: (value) => value,
     setIcon: () => {},

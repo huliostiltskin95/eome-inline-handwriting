@@ -900,6 +900,8 @@ export class MindmapView extends TextFileView {
     nodeWidth: 300
   };
 
+  public readonly eomePlugin: MindmapPlugin;
+
   /** Pen size and colour, persisted in the plugin's data.json across sessions. */
   public readonly penPreferences: PenPreferenceStore;
 
@@ -907,6 +909,7 @@ export class MindmapView extends TextFileView {
     super(leaf);
     this.frontmatterStorage = new FrontmatterStorage(this.app);
     this.commandHistory = new CommandHistory(this.app);
+    this.eomePlugin = plugin;
     this.penPreferences = new PenPreferenceStore(plugin);
   }
 

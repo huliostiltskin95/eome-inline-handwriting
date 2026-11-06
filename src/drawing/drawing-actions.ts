@@ -3,6 +3,7 @@ import type { OutlineNode } from '../utils/outline';
 import type { MindmapView } from '../view/mindmap-view';
 import type { RelationKind } from '../view/relations';
 import { createDrawingSvg, parseDrawingSvg, hasLegacyOpaqueBacking } from './drawing-svg';
+import { createEomeSvg } from './svg-folder';
 import { extractDrawingLink } from './drawing-link';
 import { warmWhiteboardRuntime } from './whiteboard-runtime';
 import {
@@ -73,11 +74,8 @@ function drawingBaseName(view: MindmapView, node: OutlineNode): string {
 
 async function createAttachment(view: MindmapView, node: OutlineNode, svg: string): Promise<TFile> {
   if (!view.file) throw new Error('No Markdown file is open.');
-  const path = await view.app.fileManager.getAvailablePathForAttachment(
-    `${drawingBaseName(view, node)}.svg`,
-    view.file.path
-  );
-  return await view.app.vault.create(path, svg);
+  return createEomeSvg(view.app, view.eomePlugin.svgFolder,
+    `${drawingBaseName(view, node)}.svg`, svg);
 }
 
 function attachmentEmbed(view: MindmapView, attachment: TFile): string {

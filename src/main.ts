@@ -5,8 +5,11 @@ import {
   MarkdownView,
   Menu,
   Notice,
+  PluginSettingTab,
+  Setting,
 } from 'obsidian';
 import { VIEW_TYPE_MINDMAP } from './constants';
+import { DEFAULT_SVG_FOLDER, validateSvgFolder } from './drawing/svg-folder';
 import { addToggleMindmapMenuItem } from './integration/context-menu';
 import { MindmapView } from './view/mindmap-view';
 import {
@@ -22,12 +25,28 @@ import { exportMindmapViewToCanvas } from './commands/export-canvas';
 import { exportMindmapViewToPdf, exportMindmapViewToSvg } from './commands/export-vector';
 
 export default class MindmapPlugin extends Plugin {
+  public svgFolder = DEFAULT_SVG_FOLDER;
+
+  public async saveSvgFolder(value: string): Promise<void> {
+    const folder = validateSvgFolder(value);
+    const current = (await this.loadData() as Record<string, unknown> | null) ?? {};
+    current.svgFolder = folder;
+    await this.saveData(current);
+    this.svgFolder = folder;
+  }
+
   private suppressNextAutoOpen = new Set<string>();
   private autoOpenTimer: number | null = null;
   private autoOpenRunning = false;
   private autoOpenQueued = false;
 
   async onload() {
+    const saved = (await this.loadData() as Record<string, unknown> | null)?.svgFolder;
+    if (typeof saved === 'string') {
+      try { this.svgFolder = validateSvgFolder(saved); }
+      catch (error) { console.warn('Invalid saved EOME SVG folder; using default.', error); }
+    }
+    this.addSettingTab(new EomeSettingsTab(this.app, this));
     this.registerView(
       VIEW_TYPE_MINDMAP,
       (leaf: WorkspaceLeaf) => new MindmapView(leaf, this)
@@ -380,5 +399,41 @@ export default class MindmapPlugin extends Plugin {
         await view.reloadDataIncremental();
       }
     }
+  }
+}
+
+/** Location for native EOME SVGs, independent of Obsidian's default attachment folder. */
+class EomeSettingsTab extends PluginSettingTab {
+  constructor(app: MindmapPlugin['app'], private readonly plugin: MindmapPlugin) {
+    super(app, plugin);
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+    new Setting(containerEl)
+      .setName('Cartella degli SVG EOME')
+      .setDesc('Percorso relativo alla radice del vault. La cartella viene creata automaticamente al primo disegno; gli SVG già esistenti non vengono spostati.')
+      .addText(input => {
+        input.setPlaceholder(DEFAULT_SVG_FOLDER).setValue(this.plugin.svgFolder);
+        const save = async (): Promise<void> => {
+          try {
+            await this.plugin.saveSvgFolder(input.getValue());
+          } catch (error) {
+            new Notice(error instanceof Error ? error.message : 'Cartella SVG non valida.');
+            input.setValue(this.plugin.svgFolder);
+          }
+        };
+        input.inputEl.addEventListener('change', () => { void save(); });
+        input.inputEl.addEventListener('keydown', event => {
+          if (event.key === 'Enter') input.inputEl.blur();
+        });
+      });
+    new Setting(containerEl)
+      .setName('Ripristina cartella predefinita')
+      .addButton(button => button.setButtonText('Ripristina').onClick(async () => {
+        await this.plugin.saveSvgFolder(DEFAULT_SVG_FOLDER);
+        this.display();
+      }));
   }
 }
