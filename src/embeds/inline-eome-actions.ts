@@ -475,7 +475,26 @@ export function connectInlineHandwriting(
   };
   undo.addEventListener('click', () => run('undo'));
   redo.addEventListener('click', () => run('redo'));
-  const down = (e: PointerEvent) => { controller.pointerDown(e); };
+  // Touch taps select nodes; a stylus remains the primary in-place ink tool.
+  // Mouse clicks select by default. Opt into mouse drawing explicitly to avoid
+  // starting a stroke before the click or context-menu event can fire.
+  let mouseDrawing = false;
+  const mouseMode = toolbar.createEl('button', {
+    text: 'Disegna col mouse',
+    cls: 'mindmap-eome-mouse-ink-mode',
+    attr: { 'aria-pressed': 'false', 'aria-label': 'Attiva disegno diretto con mouse' }
+  });
+  mouseMode.addEventListener('click', () => {
+    mouseDrawing = !mouseDrawing;
+    mouseMode.setAttribute('aria-pressed', String(mouseDrawing));
+    mouseMode.setText(mouseDrawing ? 'Mouse: disegno' : 'Disegna col mouse');
+  });
+  const shouldInk = (e: PointerEvent): boolean =>
+    e.button === 0 && (e.pointerType === 'pen' ||
+      (e.pointerType === 'mouse' && (mouseDrawing || e.altKey)));
+  const down = (e: PointerEvent) => {
+    if (shouldInk(e)) controller.pointerDown(e);
+  };
   const move = (e: PointerEvent) => { controller.pointerMove(e); };
   const up = (e: PointerEvent) => { controller.pointerEnd(e); };
   wrapper.addEventListener('pointerdown', down, true);
