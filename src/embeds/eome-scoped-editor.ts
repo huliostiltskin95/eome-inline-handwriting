@@ -35,6 +35,7 @@ export class EomeScopedEditor extends ItemView {
   private host: HTMLElement | null = null;
   private status: HTMLElement | null = null;
   private backup: HTMLElement | null = null;
+  private selectedFallbackLink: string | null = null;
   private fallbackCleanup: Array<() => void> = [];
   private diagramObserver: MutationObserver | null = null;
   private firstNodeButton: HTMLButtonElement | null = null;
@@ -198,7 +199,10 @@ export class EomeScopedEditor extends ItemView {
       row.setAttribute('tabindex', '0');
       row.setAttribute('role', 'button');
       row.setAttribute('aria-label', 'Seleziona nodo manoscritto ' + (extractDrawingLink(node.text) || String(node.line + 1)));
+      const nodeKey = extractDrawingLink(node.text) ?? node.text;
+      if (this.selectedFallbackLink === nodeKey) row.classList.add('selected');
       const select = (): void => {
+        this.selectedFallbackLink = nodeKey;
         this.backup?.querySelectorAll('.eome-tab-fallback-node').forEach(el =>
           el.classList.toggle('selected', el === row));
       };
