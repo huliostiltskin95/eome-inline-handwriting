@@ -1,44 +1,87 @@
-import { Modal, MarkdownRenderChild, TFile, type MarkdownPostProcessorContext, type EventRef } from 'obsidian';
+import {
+  ItemView, MarkdownRenderChild, TFile, type MarkdownPostProcessorContext,
+  type WorkspaceLeaf, type ViewStateResult
+} from 'obsidian';
 import type MindmapPlugin from '../main';
 import { inlineMapId } from './inline-eome-identity';
-import { findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById, type InlineEomeFence } from './inline-eome-source';
+import {
+  findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById,
+  type InlineEomeFence
+} from './inline-eome-source';
 import { renderMindmapEomeEmbed } from './eome-embed';
 
-/** A single Markdown fence is the document for this editor, never the entire
- * host .md. Every interaction persists the fence (and its own relation data)
- * immediately; closing this modal merely returns to the refreshed preview.
+export const VIEW_TYPE_EOME_SCOPED = 'eome-scoped-map-tab';
+
+interface ScopedViewState {
+  file: string;
+  line: number;
+  id: string | null;
+  source: string;
+}
+
+/**
+ * A normal Obsidian ItemView: tabs, split panes, history and tab close are
+ * managed by Workspace. The only editable document is the selected fence.
+ * SVG writes and pair relations persist immediately to their vault files.
  */
-export class EomeScopedEditor extends Modal {
+export class EomeScopedEditor extends ItemView {
   private host: HTMLElement | null = null;
   private children: MarkdownRenderChild[] = [];
   private refreshTimer: number | null = null;
   private renderGeneration = 0;
-  private closed = false;
-  private modifyRef: EventRef | null = null;
   private selectionObserver: MutationObserver | null = null;
-  private source: string;
-  private line: number;
-  private id: string | null;
+  private file: TFile | null = null;
+  private source = '';
+  private line = 0;
+  private mapId: string | null = null;
+  private closed = false;
 
-  constructor(private readonly plugin: MindmapPlugin,
-    private readonly file: TFile, fence: InlineEomeFence) {
-    super(plugin.app);
-    this.source = fence.content;
-    this.line = fence.open;
-    this.id = inlineMapId(fence.content);
+  constructor(leaf: WorkspaceLeaf, private readonly plugin: MindmapPlugin) {
+    super(leaf);
   }
 
-  onOpen(): void {
-    this.modalEl.addClass('eome-scoped-editor-modal');
-    this.setTitle('EOME — modifica mappa');
-    this.contentEl.createDiv({ cls: 'eome-scoped-instructions',
-      text: 'Scrivi nei nodi con la penna. Seleziona un nodo e usa —+ per il ramo destro o └+ per il dettaglio sotto. Chiudi per tornare alla nota.' });
-    this.host = this.contentEl.createDiv({ cls: 'eome-scoped-editor-host' });
-    this.modifyRef = this.plugin.app.vault.on('modify', changed => {
-      if (changed.path === this.file.path || (changed instanceof TFile && changed.extension.toLowerCase() === 'svg'))
-        this.scheduleRefresh(changed.path === this.file.path ? 120 : 550);
+  getViewType(): string { return VIEW_TYPE_EOME_SCOPED; }
+  getDisplayText(): string {
+    return this.file ? `EOME · ${this.file.basename} · ${this.line + 1}` : 'Mappa EOME';
+  }
+  getIcon(): string { return 'network'; }
+
+  getState(): Record<string, unknown> {
+    return {
+      file: this.file?.path ?? '',
+      id: this.mapId,
+      line: this.line,
+      source: this.source,
+    };
+  }
+
+  async setState(state: ScopedViewState, result: ViewStateResult): Promise<void> {
+    await super.setState(state, result);
+    const file = typeof state?.file === 'string'
+      ? this.app.vault.getAbstractFileByPath(state.file) : null;
+    this.file = file instanceof TFile && file.extension === 'md' ? file : null;
+    this.line = Number.isSafeInteger(state?.line) && state.line >= 0 ? state.line : 0;
+    this.mapId = typeof state?.id === 'string' ? state.id : null;
+    this.source = typeof state?.source === 'string' ? state.source : '';
+    if (this.host) await this.refresh();
+  }
+
+  async onOpen(): Promise<void> {
+    this.closed = false;
+    this.contentEl.empty();
+    this.contentEl.addClass('eome-scoped-tab');
+    this.contentEl.createDiv({
+      cls: 'eome-scoped-instructions',
+      text: 'Seleziona un nodo per scrivere con la penna, usa Modifica nodo per l’editor avanzato, —+ per il ramo parallelo o └+ per il dettaglio.'
     });
-    void this.refresh();
+    this.host = this.contentEl.createDiv({ cls: 'eome-scoped-editor-host' });
+    this.registerEvent(this.app.vault.on('modify', changed => {
+      if (!this.file) return;
+      if (changed.path === this.file.path || (changed instanceof TFile && changed.extension.toLowerCase() === 'svg')) {
+        this.scheduleRefresh(changed.path === this.file.path ? 120 : 500);
+      }
+    }));
+    if (this.file) await this.refresh();
   }
 
   private scheduleRefresh(delay: number): void {
@@ -51,26 +94,29 @@ export class EomeScopedEditor extends Modal {
   }
 
   private locate(markdown: string): InlineEomeFence | null {
-    if (this.id) return findInlineFenceById(markdown, this.id);
+    if (this.mapId) return findInlineFenceById(markdown, this.mapId);
     const atLine = findInlineFenceAtLine(markdown, this.line);
     if (atLine && atLine.open === this.line) {
-      if (atLine.content.replace(/\r\n/g, '\n').trim() === this.source.replace(/\r\n/g, '\n').trim())
-        return atLine;
-      // First edit stamps the fence ID and potentially inserts a new SVG.
-      // Do not lose the active map before its ID has been cached.
-      if (!this.id && inlineMapId(atLine.content)) return atLine;
+      if (atLine.content.replace(/\r\n/g, '\n').trim() === this.source.replace(/\r\n/g, '\n').trim()) return atLine;
+      // The first write may insert the persistent map marker.
+      if (inlineMapId(atLine.content)) return atLine;
     }
     return findInlineFenceByContent(markdown, this.source);
   }
 
+  private unloadRenderedChildren(): void {
+    for (const child of this.children) this.removeChild(child);
+    this.children = [];
+  }
+
   private async refresh(): Promise<void> {
-    if (this.closed || !this.host) return;
+    if (this.closed || !this.host || !this.file) return;
     const generation = ++this.renderGeneration;
-    const markdown = await this.plugin.app.vault.read(this.file);
-    if (this.closed || generation !== this.renderGeneration) return;
+    const markdown = await this.app.vault.read(this.file);
+    if (this.closed || generation !== this.renderGeneration || !this.host) return;
     const fence = this.locate(markdown);
     if (!fence) {
-      this.host.setText('Il blocco EOME è stato spostato o modificato fuori dall’editor. Nessun altro blocco sarà modificato.');
+      this.host.setText('Blocco EOME non trovato o modificato fuori dalla mappa. Nessun altro contenuto è stato alterato.');
       return;
     }
     const selectedLine = this.host.querySelector<HTMLElement>(
@@ -78,26 +124,23 @@ export class EomeScopedEditor extends Modal {
     const restoreSelection = selectedLine !== undefined && this.source === fence.content;
     this.selectionObserver?.disconnect();
     this.selectionObserver = null;
-    this.id = inlineMapId(fence.content);
     this.source = fence.content;
+    this.mapId = inlineMapId(fence.content);
     this.line = fence.open;
-    for (const child of this.children) {
-      child.unload();
-    }
-    this.children = [];
+    this.unloadRenderedChildren();
     this.host.empty();
     const target = this.host.createDiv();
     const context = {
       sourcePath: this.file.path,
       onInlineEomeSaved: (nextSource: string) => {
         this.source = nextSource;
-        this.id = inlineMapId(nextSource);
+        this.mapId = inlineMapId(nextSource);
       },
       getSectionInfo: () => ({ lineStart: fence.open, lineEnd: fence.close }),
       addChild: (child: MarkdownRenderChild) => {
         this.children.push(child);
-        child.load();
-      },
+        this.addChild(child);
+      }
     } as unknown as MarkdownPostProcessorContext;
     if (restoreSelection) {
       const host = this.host;
@@ -118,29 +161,39 @@ export class EomeScopedEditor extends Modal {
     await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
   }
 
-  onClose(): void {
+  async onClose(): Promise<void> {
     this.closed = true;
     this.renderGeneration++;
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
     this.selectionObserver?.disconnect();
     this.selectionObserver = null;
-    if (this.modifyRef) this.plugin.app.vault.offref(this.modifyRef);
-    this.modifyRef = null;
-    for (const child of this.children) child.unload();
-    this.children = [];
+    this.unloadRenderedChildren();
     this.contentEl.empty();
-    // The Markdown file owns the preview. Ask any visible reading-mode leaf
-    // to refresh its code blocks, including after SVG-only edits.
-    for (const leaf of this.plugin.app.workspace.getLeavesOfType('markdown')) {
+    this.host = null;
+    // The source Markdown preview stays in its own tab, like a PDF embed.
+    // A rerender accounts for SVG-only modifications without changing prose.
+    for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
       const view = leaf.view as unknown as {
         file?: TFile;
         previewMode?: { rerender?: (force?: boolean) => void };
       };
-      if (view.file?.path === this.file.path) view.previewMode?.rerender?.(true);
+      if (view.file?.path === this.file?.path) view.previewMode?.rerender?.(true);
     }
   }
 }
 
-export function openScopedEomeEditor(plugin: MindmapPlugin, file: TFile, fence: InlineEomeFence): void {
-  new EomeScopedEditor(plugin, file, fence).open();
+export async function openScopedEomeEditor(
+  plugin: MindmapPlugin, file: TFile, fence: InlineEomeFence
+): Promise<void> {
+  const leaf = plugin.app.workspace.getLeaf('tab');
+  await leaf.setViewState({
+    type: VIEW_TYPE_EOME_SCOPED,
+    state: {
+      file: file.path, line: fence.open,
+      id: inlineMapId(fence.content), source: fence.content
+    } satisfies ScopedViewState,
+    active: true
+  });
+  await plugin.app.workspace.revealLeaf(leaf);
 }

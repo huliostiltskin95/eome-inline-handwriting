@@ -87,6 +87,7 @@ async function verifyTopLevelLoadAndOnload() {
   }
 
   class TextFileViewStub {}
+  class ItemViewStub {}
   class ModalStub {}
   class PluginSettingTabStub {
     constructor() { this.containerEl = { empty() {} }; }
@@ -96,6 +97,7 @@ async function verifyTopLevelLoadAndOnload() {
   const obsidianStub = Object.freeze({
     Plugin: PluginStub,
     TextFileView: TextFileViewStub,
+    ItemView: ItemViewStub,
     Modal: ModalStub,
     PluginSettingTab: PluginSettingTabStub,
     Setting: SettingStub,

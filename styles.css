@@ -2314,3 +2314,50 @@ body.is-mobile .eome-drawing-footer button,
   }
   .eome-scoped-editor-host { min-height: 320px; }
 }
+
+/* EOME 0.4.1: a native Obsidian tab, not a dialog overlay. */
+.eome-scoped-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+}
+.eome-scoped-tab .eome-scoped-instructions {
+  flex: 0 0 auto;
+  padding: 0 4px 10px;
+}
+.eome-scoped-tab .eome-scoped-editor-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+.eome-scoped-tab .mindmap-eome-wrapper {
+  height: max(540px, 100%);
+  min-height: 100%;
+}
+/* Preview is inert; in the dedicated editor the SVG node itself must be
+   selectable by mouse, fingertip and stylus so advanced editing is reachable. */
+.eome-scoped-tab .eome-scoped-editing .mindmap-eome-overlay {
+  pointer-events: auto !important;
+  cursor: pointer;
+}
+.eome-scoped-tab .eome-scoped-editing .mindmap-eome-overlay.selected {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.eome-scoped-tab .mindmap-eome-ink-tools .mindmap-eome-advanced-editor {
+  min-width: 100px;
+  min-height: 44px;
+  padding: 0 10px;
+  font-size: var(--font-ui-small);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .eome-scoped-tab { padding: 4px; }
+  .eome-scoped-tab .eome-scoped-instructions { font-size: var(--font-ui-smaller); }
+  .eome-scoped-tab .mindmap-eome-wrapper { height: max(460px, 100%); }
+}
