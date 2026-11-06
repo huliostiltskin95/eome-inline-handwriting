@@ -22,7 +22,10 @@ export function layoutRelationNodes(nodes: RouteNode[], relations: readonly Eome
     children.set(rel.source, list);
   }
   if (!parents.size) return result;
-  const gap = 60;
+  // Keep a clear writing gutter. Placement depends on tree structure and SVG
+  // dimensions, not on transient Dagre coordinates, so new strokes do not
+  // make unrelated branches jump.
+  const gap = 72;
   const place = (node: RouteNode, left: number, top: number): number => {
     node.x = left + node.w / 2;
     node.y = top + node.h / 2;
@@ -39,7 +42,10 @@ export function layoutRelationNodes(nodes: RouteNode[], relations: readonly Eome
     }
     for (const rel of links.filter(r => r.kind === 'dettaglio' || r.kind === 'causa')) {
       const child = indexed.get(rel.target)!;
-      bottom = place(child, left + 60, bottom + gap);
+      // An elbow must descend *below* the source, not sit alongside it.
+      // Reserve enough indentation for the actual handwriting width.
+      const detailIndent = Math.max(60, Math.min(110, node.w / 2));
+      bottom = place(child, left + detailIndent, bottom + gap);
     }
     return bottom;
   };
