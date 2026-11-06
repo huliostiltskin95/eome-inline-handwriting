@@ -32,8 +32,9 @@ describe('configurable EOME SVG folder', () => {
     };
     const a = await createEomeSvg(app as never, 'Studio/EOME/SVG', 'Parola.svg', '<svg/>');
     const b = await createEomeSvg(app as never, 'Studio/EOME/SVG', 'Parola.svg', '<svg/>');
-    expect(a.path).toBe('Studio/EOME/SVG/Parola.svg');
-    expect(b.path).toBe('Studio/EOME/SVG/Parola 1.svg');
+    expect(a.path).toMatch(/^Studio\/EOME\/SVG\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.svg$/);
+    expect(b.path).toMatch(/^Studio\/EOME\/SVG\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.svg$/);
+    expect(a.path).not.toBe(b.path);
     expect(created).toHaveLength(2);
     expect(entries.get('Studio/EOME/SVG')).toBeInstanceOf(TFolder);
   });
@@ -68,7 +69,7 @@ describe('configurable EOME SVG folder', () => {
     };
     const result = await createEomeSvg(app as never, 'EOME/SVG', 'EOME manoscritto.svg', '<svg/>');
     expect(folders).toEqual([]);
-    expect(result.path).toBe('eome/svg/EOME manoscritto 1.svg');
+    expect(result.path).toMatch(/^eome\/svg\/[0-9a-f-]{36}\.svg$/);
     expect(entries.get(old.path)).toBe(old);
     expect(created).toEqual([result.path]);
   });
