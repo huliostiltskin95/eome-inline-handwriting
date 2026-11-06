@@ -11,8 +11,9 @@ import { AttachmentVersions } from '../view/attachment-versions';
 import type { MindmapView } from '../view/mindmap-view';
 import type { EomeRelation, RelationArrowMode, RelationKind } from '../view/relations';
 import { createOrUpdateRelation, normalizeRelations, relationNodeKey, RELATIONS_FIELD, setRelationArrow } from '../view/relations';
-import { isInlineMindmapSource, insertHandwrittenNode, replaceInlineMindmapFence } from './inline-eome-source';
+import { isInlineMindmapSource, insertHandwrittenNode, replaceInlineMindmapFence, findInlineFenceAtLine, findInlineFenceById, findInlineFenceByContent } from './inline-eome-source';
 import type { ExportedDrawingItem } from '../drawing/types';
+import { outlineWithoutMapMarker } from './inline-eome-identity';
 
 const pendingFocus = new Map<string, { link: string; remaining: number }>();
 function focusKey(file: TFile, source: string): string {
@@ -126,7 +127,8 @@ export function showInlineArrowMenu(context: InlineContext, relation: EomeRelati
 }
 
 export async function addInlineDrawing(context: InlineContext, nodes: OutlineNode[],
-  line: number | null, kind: RelationKind, arrow: RelationArrowMode): Promise<void> {
+  line: number | null, kind: RelationKind, arrow: RelationArrowMode,
+  initialItems?: ExportedDrawingItem[]): Promise<void> {
   if (!isInlineMindmapSource(context.source)) return;
   const flatten = (values: OutlineNode[]): OutlineNode[] =>
     values.reduce((acc, node) => [...acc, node, ...flatten(node.children)], [] as OutlineNode[]);
@@ -138,7 +140,7 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
   let attachment: TFile | null = null;
   try {
     attachment = await createEomeSvg(context.plugin.app, context.plugin.svgFolder,
-      'EOME manoscritto.svg', createDrawingSvg([]));
+      'EOME manoscritto.svg', createDrawingSvg(initialItems ?? []));
     const link = context.plugin.app.metadataCache.fileToLinktext(attachment, context.file.path, true);
     const embed = '![[ ' + link + ' ]]';
     const normalizedEmbed = embed.replace('![[ ', '![[').replace(' ]]', ']]');
@@ -172,6 +174,63 @@ export async function addInlineDrawing(context: InlineContext, nodes: OutlineNod
       : 'Impossibile creare il nodo manoscritto in ' +
         context.plugin.svgFolder + ': ' + detail, 11000);
   }
+}
+
+/** The first word must be drawn in the advanced editor BEFORE the SVG or
+ * Markdown node exists. Cancelling or saving a blank sheet creates nothing.
+ * Recheck the live fence after the drawing is saved: other tabs or devices
+ * may have added a root while the modal was open.
+ */
+export async function createFirstInlineDrawing(context: InlineContext): Promise<void> {
+  const current = await context.plugin.app.vault.read(context.file);
+  const locate = (markdown: string) => {
+    const id = inlineMapId(context.source);
+    if (id) return findInlineFenceById(markdown, id);
+    const section = context.ctx.getSectionInfo(context.container);
+    const byLine = section ? findInlineFenceAtLine(markdown, section.lineStart) : null;
+    if (byLine && byLine.content.trim() === context.source.trim()) return byLine;
+    return findInlineFenceByContent(markdown, context.source);
+  };
+  const initial = locate(current);
+  if (!initial) {
+    new Notice('Il blocco EOME non è più identificabile: riaprilo dalla nota.');
+    return;
+  }
+  if (parseOutline(outlineWithoutMapMarker(initial.content)).length > 0) {
+    new Notice('La mappa contiene già un primo nodo.');
+    return;
+  }
+  const { openDrawingModal } = await import('../drawing/drawing-modal');
+  const result = await openDrawingModal(context.plugin.app, [], undefined,
+    new PenPreferenceStore(context.plugin), false);
+  if (!result) return;
+  const hasInk = result.items.some(item =>
+    item.type === 'pen' && Array.isArray(item.data.path) && item.data.path.length > 0);
+  if (!hasInk) {
+    new Notice('Il primo nodo richiede almeno un tratto a penna. Nessun file è stato creato.');
+    return;
+  }
+
+  const latest = locate(await context.plugin.app.vault.read(context.file));
+  if (!latest || parseOutline(outlineWithoutMapMarker(latest.content)).length > 0) {
+    new Notice('La mappa è stata modificata durante il disegno. Nessun nodo duplicato è stato creato.');
+    return;
+  }
+  const latestContext: InlineContext = {
+    ...context,
+    source: latest.content,
+    ctx: {
+      ...context.ctx,
+      getSectionInfo: () => ({ lineStart: latest.open, lineEnd: latest.close }),
+      onInlineEomeSaved: (nextSource: string) => {
+        const original = context.ctx as MarkdownPostProcessorContext & {
+          onInlineEomeSaved?: (nextSource: string) => void;
+        };
+        original.onInlineEomeSaved?.(nextSource);
+      }
+    } as MarkdownPostProcessorContext
+  };
+  await addInlineDrawing(latestContext, [], null, 'figlio', 'none', result.items);
 }
 
 export function showInlineCreateMenu(context: InlineContext, nodes: OutlineNode[],
