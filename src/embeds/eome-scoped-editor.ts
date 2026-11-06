@@ -188,6 +188,7 @@ export class EomeScopedEditor extends ItemView {
         this.source = nextSource;
         this.mapId = inlineMapId(nextSource);
       },
+      requestFirstNode: () => this.createFirstNode(),
       getSectionInfo: () => ({ lineStart: fence.open, lineEnd: fence.close }),
       addChild: (child: MarkdownRenderChild) => {
         this.children.push(child);
