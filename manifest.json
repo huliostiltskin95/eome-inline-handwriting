@@ -1,7 +1,7 @@
 {
 	"id": "eome-inline-handwriting",
 	"name": "EOME Inline Handwriting",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"minAppVersion": "1.8.7",
 	"description": "Mappa EOME scrivibile direttamente in blocchi Markdown con SVG, collegamenti paralleli/L e frecce.",
 	"author": "Kornelius Paede",
