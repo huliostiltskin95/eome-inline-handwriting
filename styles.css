@@ -2537,3 +2537,82 @@ body.is-mobile .eome-drawing-footer button,
 .eome-drawing-inline .eome-drawing-footer { flex-wrap: wrap; flex: 0 0 auto; }
 .mindmap-eome-wrapper:not(.eome-scoped-editing) { min-height: 0; max-height: none; }
 .mindmap-eome-host { min-width: 0; width: 100%; max-width: 100%; }
+
+/* EOME split workspace: fixed-height preview and inline whiteboard.
+   No motion, translucent overlays or low-contrast grab handles (e-ink). */
+.eome-scoped-tab .eome-scoped-split {
+  --eome-preview-percent: 48%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.eome-scoped-tab .eome-scoped-split > .eome-scoped-editor-host {
+  flex: 0 0 var(--eome-preview-percent);
+  height: var(--eome-preview-percent);
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--text-normal);
+}
+.eome-scoped-tab .eome-scoped-splitter {
+  flex: 0 0 18px;
+  min-height: 18px;
+  background: var(--background-primary);
+  border-top: 1px solid var(--text-normal);
+  border-bottom: 1px solid var(--text-normal);
+  cursor: row-resize;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.eome-scoped-tab .eome-scoped-splitter:focus-visible {
+  outline: 3px solid var(--text-normal);
+  outline-offset: -3px;
+}
+.eome-scoped-tab .eome-scoped-splitter-handle {
+  width: 66px;
+  height: 5px;
+  background: var(--text-normal);
+  border-radius: 0;
+}
+.eome-scoped-tab .eome-scoped-lower-pane {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  background: var(--background-primary);
+  border: 1px solid var(--text-normal);
+}
+.eome-scoped-tab .eome-scoped-editor-placeholder {
+  padding: 16px;
+  font-size: var(--font-ui-small);
+  color: var(--text-normal);
+}
+.eome-scoped-tab .eome-map-drawing-panel {
+  height: 100%;
+  min-height: 0;
+  border: none;
+  overflow: auto;
+}
+.eome-scoped-tab .eome-scoped-lower-pane:has(.eome-map-drawing-panel) .eome-scoped-editor-placeholder { display: none; }
+.eome-scoped-tab .eome-scoped-main-toolbar { gap: 8px; padding: 4px 4px 8px; }
+.eome-scoped-tab .eome-scoped-main-toolbar > button { min-height: 44px; border: 1px solid var(--text-normal); }
+.eome-scoped-tab.eome-scoped-readonly .eome-scoped-lower-pane,
+.eome-scoped-tab.eome-scoped-readonly .eome-scoped-splitter,
+.eome-scoped-tab.eome-scoped-readonly .eome-scoped-main-toolbar .eome-create-first-node { display: none; }
+.eome-scoped-tab.eome-scoped-readonly .eome-scoped-split > .eome-scoped-editor-host {
+  flex: 1 1 auto;
+  height: 100%;
+}
+.eome-scoped-tab.eome-scoped-readonly .eome-tab-fallback-actions { display: none; }
+.eome-scoped-tab.eome-scoped-readonly .eome-tab-fallback-node { pointer-events: none; }
+.eome-scoped-tab.eome-scoped-readonly .mindmap-eome-ink-tools { display: none; }
+@media (max-width: 640px) {
+  .eome-scoped-tab .eome-scoped-splitter { flex-basis: 24px; min-height: 24px; }
+  .eome-scoped-tab .eome-scoped-splitter-handle { width: 84px; }
+  .eome-scoped-tab .eome-scoped-split > .eome-scoped-editor-host { min-height: 0; }
+  .eome-scoped-tab .eome-tab-diagram,
+  .eome-scoped-tab .eome-tab-diagram > .mindmap-eome-wrapper { min-height: 100%; }
+}
