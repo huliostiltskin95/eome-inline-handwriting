@@ -1,4 +1,4 @@
-import { Modal, MarkdownRenderChild, TFile, type MarkdownPostProcessorContext } from 'obsidian';
+import { Modal, MarkdownRenderChild, TFile, type MarkdownPostProcessorContext, type EventRef } from 'obsidian';
 import type MindmapPlugin from '../main';
 import { inlineMapId } from './inline-eome-identity';
 import { findInlineFenceAtLine, findInlineFenceByContent, findInlineFenceById, type InlineEomeFence } from './inline-eome-source';
@@ -14,6 +14,7 @@ export class EomeScopedEditor extends Modal {
   private refreshTimer: number | null = null;
   private renderGeneration = 0;
   private closed = false;
+  private modifyRef: EventRef | null = null;
   private source: string;
   private line: number;
   private id: string | null;
@@ -32,10 +33,10 @@ export class EomeScopedEditor extends Modal {
     this.contentEl.createDiv({ cls: 'eome-scoped-instructions',
       text: 'Scrivi nei nodi con la penna. Seleziona un nodo e usa —+ per il ramo destro o └+ per il dettaglio sotto. Chiudi per tornare alla nota.' });
     this.host = this.contentEl.createDiv({ cls: 'eome-scoped-editor-host' });
-    this.registerEvent(this.plugin.app.vault.on('modify', changed => {
-      if (changed.path === this.file.path || changed.extension.toLowerCase() === 'svg')
+    this.modifyRef = this.plugin.app.vault.on('modify', changed => {
+      if (changed.path === this.file.path || (changed instanceof TFile && changed.extension.toLowerCase() === 'svg'))
         this.scheduleRefresh(changed.path === this.file.path ? 120 : 550);
-    }));
+    });
     void this.refresh();
   }
 
@@ -70,7 +71,6 @@ export class EomeScopedEditor extends Modal {
     this.source = fence.content;
     this.line = fence.open;
     for (const child of this.children) {
-      this.removeChild(child);
       child.unload();
     }
     this.children = [];
@@ -81,7 +81,7 @@ export class EomeScopedEditor extends Modal {
       getSectionInfo: () => ({ lineStart: fence.open, lineEnd: fence.close }),
       addChild: (child: MarkdownRenderChild) => {
         this.children.push(child);
-        this.addChild(child);
+        child.load();
       },
     } as unknown as MarkdownPostProcessorContext;
     await renderMindmapEomeEmbed(this.plugin, fence.content, target, context, 'editor');
@@ -91,6 +91,8 @@ export class EomeScopedEditor extends Modal {
     this.closed = true;
     this.renderGeneration++;
     if (this.refreshTimer !== null) window.clearTimeout(this.refreshTimer);
+    if (this.modifyRef) this.plugin.app.vault.offref(this.modifyRef);
+    this.modifyRef = null;
     for (const child of this.children) {
       this.removeChild(child);
       child.unload();
