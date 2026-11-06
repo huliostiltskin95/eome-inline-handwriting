@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - manifest.json
+      - .github/workflows/publish-eome.yml
   workflow_dispatch:
 permissions:
   contents: write
