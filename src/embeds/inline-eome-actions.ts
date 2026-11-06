@@ -228,7 +228,7 @@ export async function createFirstInlineDrawing(context: InlineContext): Promise<
         };
         original.onInlineEomeSaved?.(nextSource);
       }
-    } as MarkdownPostProcessorContext
+    } as unknown as MarkdownPostProcessorContext
   };
   await addInlineDrawing(latestContext, [], null, 'figlio', 'none', result.items);
 }
