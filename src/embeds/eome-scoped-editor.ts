@@ -46,7 +46,7 @@ export class EomeScopedEditor extends ItemView {
   }
   getIcon(): string { return 'network'; }
 
-  getState(): ScopedViewState {
+  getState(): Record<string, unknown> {
     return {
       file: this.file?.path ?? '',
       id: this.mapId,
