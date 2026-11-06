@@ -20,7 +20,8 @@ import { openInternalLink } from './utils/outline';
 import type { RelationKind } from './view/relations';
 import { renderMindmapEomeEmbed } from './embeds/eome-embed';
 import { findInlineFenceAtLine, isInlineMindmapSource } from './embeds/inline-eome-source';
-import { openScopedEomeEditor } from './embeds/eome-scoped-editor';
+import { EomeScopedEditor, VIEW_TYPE_EOME_SCOPED, openScopedEomeEditor } from './embeds/eome-scoped-editor';
+import { insertEomeFenceAtCursor } from './embeds/new-eome-block';
 import { exportMindmapViewToCanvas } from './commands/export-canvas';
 import { exportMindmapViewToPdf, exportMindmapViewToSvg } from './commands/export-vector';
 
@@ -51,9 +52,19 @@ export default class MindmapPlugin extends Plugin {
       VIEW_TYPE_MINDMAP,
       (leaf: WorkspaceLeaf) => new MindmapView(leaf, this)
     );
+    this.registerView(VIEW_TYPE_EOME_SCOPED, (leaf: WorkspaceLeaf) =>
+      new EomeScopedEditor(leaf, this));
 
     this.registerMarkdownCodeBlockProcessor('mindmap-eome', async (source, el, ctx) => {
       await renderMindmapEomeEmbed(this, source, el, ctx);
+    });
+
+    this.addCommand({
+      id: 'insert-eome-code-block',
+      name: 'EOME: inserisci nuovo blocco mappa',
+      editorCallback: editor => {
+        insertEomeFenceAtCursor(editor);
+      }
     });
 
     // Available through Obsidian's Slash Commands and the command palette.
