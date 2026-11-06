@@ -5,7 +5,10 @@ import {
 import type MindmapPlugin from '../main';
 import { inlineMapId, outlineWithoutMapMarker } from './inline-eome-identity';
 import { parseOutline } from '../utils/outline';
-import { createFirstInlineDrawing, addInlineDrawing, editInlineDrawing } from './inline-eome-actions';
+import {
+  createFirstInlineDrawing, createRelatedInlineDrawing, editInlineDrawing,
+  showInlineNodeMenu, bindInlineNodeContextMenu
+} from './inline-eome-actions';
 import { extractDrawingLink } from '../drawing/drawing-link';
 import type { OutlineNode } from '../utils/outline';
 import {
@@ -32,6 +35,7 @@ export class EomeScopedEditor extends ItemView {
   private host: HTMLElement | null = null;
   private status: HTMLElement | null = null;
   private backup: HTMLElement | null = null;
+  private fallbackCleanup: Array<() => void> = [];
   private diagramObserver: MutationObserver | null = null;
   private firstNodeButton: HTMLButtonElement | null = null;
   private creatingFirstNode = false;
@@ -171,7 +175,7 @@ export class EomeScopedEditor extends ItemView {
     }
     this.backup.createDiv({
       cls: 'eome-tab-fallback-caption',
-      text: 'Nodi della mappa · seleziona una parola per modificarla o aggiungere un collegamento'
+      text: 'Clic/tocco: seleziona il nodo · doppio clic: editor avanzato · clic destro/pressione lunga: nuovi rami'
     });
     const context = {
       sourcePath: file.path,
@@ -191,6 +195,33 @@ export class EomeScopedEditor extends ItemView {
     };
     for (const node of nodes) {
       const row = this.backup.createDiv({ cls: 'eome-tab-fallback-node' });
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('role', 'button');
+      row.setAttribute('aria-label', 'Seleziona nodo manoscritto ' + (extractDrawingLink(node.text) || String(node.line + 1)));
+      const select = (): void => {
+        this.backup?.querySelectorAll('.eome-tab-fallback-node').forEach(el =>
+          el.classList.toggle('selected', el === row));
+      };
+      row.addEventListener('click', event => {
+        if ((event.target as Element).closest('button')) return;
+        select();
+      });
+      row.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        select();
+      });
+      const stopMenu = bindInlineNodeContextMenu(row, position => {
+        select();
+        showInlineNodeMenu(editContext, roots, node, position);
+      });
+      this.addFallbackCleanup(stopMenu);
+      row.addEventListener('dblclick', event => {
+        if ((event.target as Element).closest('button')) return;
+        event.preventDefault();
+        select();
+        void editInlineDrawing(editContext, roots, node);
+      });
       const drawingLink = extractDrawingLink(node.text);
       const destination = drawingLink
         ? this.app.metadataCache.getFirstLinkpathDest(drawingLink, file.path)
@@ -206,9 +237,7 @@ export class EomeScopedEditor extends ItemView {
             alt: drawingLink ?? 'Nodo manoscritto'
           }
         });
-        image.addEventListener('click', () => {
-          void editInlineDrawing(editContext, roots, node);
-        });
+        image.setAttribute('title', 'Clicca per selezionare · doppio clic per modificare');
       } else {
         row.createSpan({ text: drawingLink ?? node.text });
       }
@@ -223,7 +252,12 @@ export class EomeScopedEditor extends ItemView {
       const add = (label: string, kind: 'figlio' | 'dettaglio'): void => {
         const button = actions.createEl('button', { text: label });
         button.addEventListener('click', () => {
-          void addInlineDrawing(editContext, roots, node.line, kind, 'none');
+          select();
+          void createRelatedInlineDrawing(editContext, node, kind).catch(error => {
+            console.error('EOME branch editor failed:', error);
+            new Notice('Impossibile creare il ramo: ' +
+              (error instanceof Error ? error.message : String(error)));
+          });
         });
       };
       add('—+ Parallelo', 'figlio');
@@ -231,7 +265,13 @@ export class EomeScopedEditor extends ItemView {
     }
   }
 
+  private addFallbackCleanup(cleanup: () => void): void {
+    this.fallbackCleanup.push(cleanup);
+  }
+
   private unloadRenderedChildren(): void {
+    for (const cleanup of this.fallbackCleanup) cleanup();
+    this.fallbackCleanup = [];
     for (const child of this.children) this.removeChild(child);
     this.children = [];
   }
