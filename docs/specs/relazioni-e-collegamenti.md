@@ -2,7 +2,7 @@
 
 > **Stato:** specifica funzionale di riferimento per il prossimo aggiornamento.  
 > **Priorità:** requisiti confermati dall'utente il 6 novembre 2026, dopo il questionario e la lettura del disegno manoscritto.  
-> **Implementazione:** **non ancora presente nella release 0.2.8**, che usa una convenzione provvisoria di collegamenti. Questo documento non va confuso con la documentazione di una funzione già disponibile.
+> **Implementazione:** disponibile in prima versione nella **0.3.2**. La 0.2.8 conserva il vecchio routing; la 0.3.2 introduce dati di coppia, segni — / L, dorsali condivise, Apple Pencil «Collega» e frecce configurabili. Il router usa ancora euristiche locali, non garantisce il minimo globale di incroci. Le prove fisiche su iPad restano da effettuare.
 >
 > In caso di conflitto con le discussioni precedenti, **prevale l'ultima precisazione**: «figlio = linea orizzontale = conseguenza; linea a L = dettaglio o causa; entrambi possono avere una freccia dove si vuole».
 
@@ -124,4 +124,4 @@ Per accettare il risultato:
 3. **Editing pen-first**: gesto Collega, selezione degli archi, frecce posizionabili.
 4. **Test strutturali, grafici e su iPad** prima della release BRAT.
 
-**Non modificare il codice della 0.2.8 solo per adeguarlo formalmente a questo documento**: la geometria già rilasciata usa ancora le regole precedenti e richiede un cambiamento coordinato dei dati, del rendering e dei controlli.
+**Stato 0.3.2:** prima implementazione completata nei sorgenti e compilata con test automatici. Rimangono aperti: collaudo iPad/Apple Pencil; risoluzione avanzata degli incroci e degli ostacoli; gestione delle rinomine dei file SVG; identità persistente per testi identici; verifica delle esportazioni con il nuovo SVG layer. Le mappe preesistenti conservano la visualizzazione legacy se non è presente `eome-relations-v1`; attivando le relazioni esplicite, gli archi precedenti non vengono convertiti e non vengono visualizzati.

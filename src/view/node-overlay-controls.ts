@@ -160,7 +160,7 @@ export function appendNodeControls(box: HTMLElement, node: OutlineNode, view: Mi
   );
   const hasExplicit = Boolean(view.file && Array.isArray(view.relations) &&
     view.relations.some(rel => rel.target === relationNodeKey(view.app, view.file!, node)));
-  if (hasParent && !hasExplicit) {
+  if (hasParent && !hasExplicit && !view.explicitRelationMode) {
     const arrow = box.createEl('button', { cls: 'eome-edge-arrow' });
     arrow.type = 'button';
     arrow.dataset.nodeLine = String(node.line);
