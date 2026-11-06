@@ -45,7 +45,9 @@ export class InlineInkController {
   constructor(private readonly view: MindmapView, private readonly wrapper: HTMLElement) {}
 
   pointerDown(event: PointerEvent): boolean {
-    if (!this.view.inlineInkEnabled || event.pointerType !== 'pen' || event.button !== 0 || this.session) return false;
+    if (!this.view.inlineInkEnabled ||
+        (event.pointerType !== 'pen' && event.pointerType !== 'mouse') ||
+        event.button !== 0 || this.session || this.view.connectionMode) return false;
     const target = event.target instanceof Element ? event.target : null;
     // Embedded SVGs may be wrapped by an Obsidian anchor. Restrict drawing by
     // the SVG image rectangle below, rather than rejecting all ancestor links.

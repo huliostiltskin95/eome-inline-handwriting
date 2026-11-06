@@ -5,11 +5,8 @@ import { DeleteNodeModal, DeleteOption } from '../ui/modals/delete-node-modal';
 import { getPrimaryZoteroLink } from '../utils/zotero';
 import { extractDrawingLink } from '../drawing/drawing-link';
 import { relationNodeKey } from './relations';
-import {
-  addBlankDrawingAsChild,
-  addBlankDrawingAsSibling,
-  editDrawing
-} from '../drawing/drawing-actions';
+import { editDrawing } from '../drawing/drawing-actions';
+import { showNewNodeMenu } from '../ui/menus/handwritten-node-menu';
 
 export interface CheckboxOverlayControl {
   checkboxToggle: HTMLButtonElement;
@@ -109,13 +106,9 @@ export function appendNodeControls(box: HTMLElement, node: OutlineNode, view: Mi
 
   // createControlButton already appends to `controls`; appending the return
   // values again would add each button twice.
-  createControlButton('plus', 'Add child', () => {
-    if (view.inlineInkEnabled) void addBlankDrawingAsChild(view, node);
-    else void view.executeAddChildCommand(node);
-  });
-  createControlButton('git-pull-request-create', 'Add sibling', () => {
-    if (view.inlineInkEnabled) void addBlankDrawingAsSibling(view, node);
-    else void view.executeAddSiblingCommand(node);
+  createControlButton('plus', 'Nuovo nodo manoscritto (— oppure L)', () => {
+    const rect = box.getBoundingClientRect();
+    showNewNodeMenu(view, node, { x: rect.right, y: rect.top });
   });
 
   // Always-visible touch target on drawing nodes: no double-tap and no text

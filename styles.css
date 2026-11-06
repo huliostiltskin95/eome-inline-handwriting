@@ -2147,3 +2147,22 @@ body.is-mobile .eome-drawing-footer button,
   color: var(--interactive-accent);
   background: var(--background-modifier-hover);
 }
+
+
+/* 0.3.3 — embedded code-block preview uses the same semantic SVG routes.
+ * All preview strokes are read-only and preserve the transparency of ink. */
+.mindmap-eome-wrapper {
+  position: relative;
+}
+.mindmap-eome-wrapper > svg.eome-relations-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.mindmap-eome-wrapper .mindmap-eome-overlay {
+  z-index: 10;
+}

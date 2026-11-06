@@ -54,54 +54,44 @@ function menuTitlesFor(targetNode: OutlineNode, app?: unknown): string[] {
   return lastMenu?.items.map((item) => item.title) ?? [];
 }
 
-describe('node drawing context menu', () => {
-  it('exposes both drawing insertion actions on a regular node', () => {
+describe('ink-only node context menu', () => {
+  it('offers two handwritten geometries and no text editor/insertion', () => {
     const titles = menuTitlesFor(node('Idea'));
-    expect(titles).toContain('Add drawing as child');
-    expect(titles).toContain('Add drawing as sibling');
-    expect(titles).not.toContain('Edit drawing');
-    expect(titles.indexOf('Add drawing as child')).toBeGreaterThan(titles.indexOf('Add sibling'));
-    expect(titles.indexOf('Add drawing as sibling')).toBeGreaterThan(titles.indexOf('Add drawing as child'));
+    expect(titles).toContain('Nuovo nodo parallelo —');
+    expect(titles).toContain('Nuovo nodo a L └');
+    expect(titles).not.toContain('Edit');
+    expect(titles).not.toContain('Add child');
+    expect(titles).not.toContain('Add sibling');
+    expect(titles).not.toContain('Add heading for this tree');
+    expect(titles).not.toContain('Paste');
   });
 
-  // A drawing node gets the same single "Edit" entry as any other node; what
-  // that entry opens is decided by the node's content, not by the menu.
-  it('offers one Edit entry regardless of what the node holds', () => {
-    for (const text of ['Idea', '![[Idea drawing.svg]]', '![[Idea.excalidraw]]']) {
-      const titles = menuTitlesFor(node(text), excalidrawApp(['Excalidraw/Idea.excalidraw.md']));
-      expect(titles.filter((title) => title === 'Edit')).toHaveLength(1);
-      expect(titles).not.toContain('Edit drawing');
-      expect(titles).not.toContain('Edit Excalidraw drawing');
-      expect(titles).not.toContain('Edit node');
-    }
+  it('opens handwriting but not plain text editing', () => {
+    expect(menuTitlesFor(node('Idea'))).not.toContain('Espandi / modifica disegno');
+    expect(menuTitlesFor(node('![[Idea drawing.svg]]')).toContain('Espandi / modifica disegno');
   });
 
-  it('hides the Excalidraw actions while the plugin is not installed', () => {
-    const titles = menuTitlesFor(node('Idea'));
-    expect(titles).not.toContain('Add Excalidraw drawing as child');
-    expect(titles).not.toContain('Add Excalidraw drawing as sibling');
+  it('opens arrow choices after selecting the parallel geometry', () => {
+    menuTitlesFor(node('Idea'));
+    const parallel = lastMenu?.items.find(item => item.title === 'Nuovo nodo parallelo —');
+    parallel?.click?.();
+    const titles = lastMenu?.items.map(item => item.title) ?? [];
+    expect(titles).toEqual(expect.arrayContaining([
+      'Senza freccia', 'Freccia all’inizio',
+      'Freccia alla fine', 'Frecce a entrambe le estremità'
+    ]));
   });
 
-  it('offers the Excalidraw actions alongside the built-in ones', () => {
-    const titles = menuTitlesFor(node('Idea'), excalidrawApp());
-    expect(titles).toContain('Add drawing as child');
-    expect(titles).toContain('Add Excalidraw drawing as child');
-    expect(titles).toContain('Add Excalidraw drawing as sibling');
-  });
-
-  it('uses the explicit node supplied by a Pencil long-press even when WebKit retargets the event', () => {
+  it('uses explicit node supplied by Pencil long-press on iPad', () => {
     const targetNode = node('Pencil target');
     const ownerDocument = {} as Document;
     const event = {
       preventDefault: () => undefined,
       stopPropagation: () => undefined,
-      clientX: 42,
-      clientY: 64,
-      target: {},
-      composedPath: () => [{}],
+      clientX: 42, clientY: 64, target: {}, composedPath: () => [{}],
     } as unknown as MouseEvent;
     const view = {
-      wrapper: { classList: { contains: () => false }, focus: () => undefined, ownerDocument },
+      wrapper: { focus: () => undefined, ownerDocument },
       isDirectNodeDragActive: () => false,
       selectedNodeLines: new Set<number>(),
       getNodeByLine: (line: number) => line === targetNode.line ? targetNode : null,
@@ -111,10 +101,7 @@ describe('node drawing context menu', () => {
     } as never;
 
     showNodeContextMenu(view, event, targetNode.line);
-
-    const titles = lastMenu?.items.map((item) => item.title) ?? [];
-    expect(titles).toContain('Add drawing as child');
-    expect(titles).toContain('Add drawing as sibling');
+    expect(lastMenu?.items.map(item => item.title)).toContain('Nuovo nodo a L └');
     expect(lastMenu?.position).toEqual({ x: 42, y: 64 });
     expect(lastMenu?.positionDocument).toBe(ownerDocument);
   });

@@ -36,6 +36,10 @@ class FakeElement {
     return child;
   }
 
+  getBoundingClientRect(): DOMRect {
+    return { top: 20, right: 120, left: 20, bottom: 60, width: 100, height: 40 } as DOMRect;
+  }
+
   createDiv(options?: { prepend?: boolean }): FakeElement {
     return this.createEl('div', options);
   }
@@ -137,28 +141,25 @@ describe('node overlay controls', () => {
   it('renders add and delete affordances as semantic buttons', () => {
     const document = new FakeDocument();
     const box = document.createElement('div');
-    const executeAddChildCommand = vi.fn();
-    const executeAddSiblingCommand = vi.fn();
     const view = {
-      file: {},
-      app: {},
-      executeAddChildCommand,
-      executeAddSiblingCommand,
+      file: {}, app: {}, wrapper: { ownerDocument: document },
     } as never;
 
     appendNodeControls(box as unknown as HTMLElement, taskNode(), view);
 
     const controls = box.children[0];
     const deleteButton = box.children[1];
-    expect(controls.children.map((button) => button.tagName)).toEqual(['BUTTON', 'BUTTON']);
+    expect(controls.children.map((button) => button.tagName)).toEqual(['BUTTON']);
     expect(controls.children.every((button) => button.type === 'button')).toBe(true);
     expect(deleteButton.tagName).toBe('BUTTON');
     expect(deleteButton.type).toBe('button');
     expect(deleteButton.attributes.get('aria-label')).toBe('Delete node');
 
-    controls.children[0].emit('click', clickEvent(0, 0));
-    expect(executeAddChildCommand).toHaveBeenCalledTimes(1);
-    controls.children[0].emit('click', clickEvent(2, 1, 'mouse'));
-    expect(executeAddChildCommand).toHaveBeenCalledTimes(1);
+    const first = clickEvent(0, 0);
+    controls.children[0].emit('click', first);
+    expect(first.stopPropagation).toHaveBeenCalledTimes(1);
+    const secondary = clickEvent(2, 1, 'mouse');
+    controls.children[0].emit('click', secondary);
+    expect(secondary.stopPropagation).toHaveBeenCalledTimes(1);
   });
 });

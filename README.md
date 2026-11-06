@@ -19,6 +19,24 @@ Il sistema di relazioni e routing della versione 0.2.8 è **provvisorio**. Le nu
 
 La [specifica funzionale completa](docs/specs/relazioni-e-collegamenti.md) è il documento di riferimento per il prossimo aggiornamento. **Non descrive funzionalità già presenti nella release BRAT 0.2.8.**
 
+## Solo input grafico: penna oppure mouse (0.3.3)
+
+Nella **vista EOME**, i nodi nuovi si creano esclusivamente come **disegni SVG**, senza un campo di testo. Puoi scrivere direttamente con Apple Pencil, una penna compatibile o il mouse; il dito rimane utile per selezionare e navigare. I nodi di testo preesistenti vengono mostrati in sola lettura. Il Markdown sottostante è ancora modificabile dall'editor standard di Obsidian, che non fa parte della vista EOME.
+
+Seleziona un nodo e apri il menu contestuale (pressione lunga o clic destro), oppure premi **+**. Scegli **Nuovo nodo parallelo —** o **Nuovo nodo a L └**, quindi seleziona **senza freccia / freccia iniziale / freccia finale / freccia doppia**. La scelta viene conservata sulla singola relazione. I collegamenti partono ora dal **lato** dell'immagine manoscritta, con un piccolo margine per non coprire la grafia. Una L fra due nodi allineati usa una deviazione ortogonale distinguibile dal tratto parallelo.
+
+### Inserire la mappa in un blocco di codice Markdown
+
+È già supportato il blocco `mindmap-eome` che riferisce un'altra nota Markdown:
+
+````markdown
+```mindmap-eome
+Percorso/della/mappa.md
+```
+````
+
+In modalità lettura viene mostrata un'**anteprima vettoriale non modificabile** della mappa, ora comprensiva dei collegamenti espliciti e delle frecce, con un comando per aprire la mappa completa. **Nessuna esportazione PDF/SVG è necessaria.** L'editing manoscritto si svolge nella vista EOME della nota collegata, non direttamente dentro il blocco.
+
 ## Novità 0.3.2 — Relazioni definite dall'utente
 
 L'aggiornamento implementa la [specifica di collegamenti](docs/specs/relazioni-e-collegamenti.md) senza conversione automatica dei vecchi SVG.
@@ -74,7 +92,7 @@ npm test
 npm run build
 ```
 
-Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.2` con i file richiesti da BRAT.
+Un workflow GitHub Actions su `main` verifica test e compilazione, quindi crea una release **prerelease** denominata `0.3.3` con i file richiesti da BRAT.
 
 ## Provenienza e licenza
 

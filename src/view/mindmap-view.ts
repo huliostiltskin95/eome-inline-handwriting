@@ -71,7 +71,6 @@ import { sortByMarkdownOrder } from '../utils/cytoscape';
 import { resetToolbarPlacement } from '../ui/toolbar/toolbar-placement';
 import { showNodeContextMenu as showNodeContextMenuFn } from './context-menu';
 import { navigateSelection as navigateSelectionFn, NavigationDirection } from './navigation';
-import { startHeadingEditing } from './heading-frames';
 import {
   copyNodesToClipboard as copyNodesToClipboardFn,
   cutNodesToClipboard as cutNodesToClipboardFn,
@@ -88,6 +87,7 @@ import {
   cycleIncomingEdgeArrow
 } from './edge-arrows';
 import { AnimationFrameHost, RenderLifecycle } from './render-lifecycle';
+import { editNodeContent, addBlankDrawingWithRelation } from '../drawing/drawing-actions';
 import {
   type EomeRelation, type RelationKind, type RelationArrowMode,
   relationNodeKey, readRelations, hasExplicitRelationSchema, createOrUpdateRelation,
@@ -815,7 +815,7 @@ export class MindmapView extends TextFileView {
         event.preventDefault();
         const selectedNode = this.getNodeByLine(Array.from(this.selectedNodeLines)[0]);
         if (selectedNode) {
-          void this.executeAddSiblingCommand(selectedNode, event.key === 'ArrowLeft' ? 'before' : 'after');
+          void addBlankDrawingWithRelation(this, selectedNode, 'figlio');
         }
       }
       return;
@@ -826,7 +826,7 @@ export class MindmapView extends TextFileView {
         event.preventDefault();
         const selectedNode = this.getNodeByLine(Array.from(this.selectedNodeLines)[0]);
         if (selectedNode) {
-          void this.executeAddChildCommand(selectedNode, 'last');
+          void addBlankDrawingWithRelation(this, selectedNode, 'figlio');
         }
       }
       return;
@@ -836,7 +836,8 @@ export class MindmapView extends TextFileView {
       if (this.selectedNodeLines.size === 1) {
         event.preventDefault();
         const selectedNodeLine = Array.from(this.selectedNodeLines)[0];
-        void this.enterEditModeForNodeByLine(selectedNodeLine);
+        const node = this.getNodeByLine(selectedNodeLine);
+        if (node) void editNodeContent(this, node);
       }
       return;
     }
@@ -2349,29 +2350,11 @@ export class MindmapView extends TextFileView {
     });
   }
 
-  public async enterEditModeForNodeByLine(nodeLine: number, isNewNode: boolean = false): Promise<void> {
+  /** Graph UI is handwriting-only; no node contenteditable/textarea. */
+  public async enterEditModeForNodeByLine(nodeLine: number, _isNewNode = false): Promise<void> {
     this.dismissNodeContextMenu();
-    for (let i = 0; i < 60; i++) {
-      const overlay = this.wrapper?.querySelector<HTMLElement>(`[data-overlay][data-node-line="${nodeLine}"]`);
-      if (overlay && !this.isUpdatingOverlays) {
-        const node = this.getFlatNodes().find(candidate => candidate.line === nodeLine);
-        if (!node) return;
-
-        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-        if (!overlay.isConnected || this.isUpdatingOverlays) continue;
-
-        this.clearSelection();
-        if (this.pendingEditNodeLine === nodeLine) {
-          this.pendingEditNodeLine = null;
-        }
-        startNodeEditing(overlay, node, this, { isNewNode });
-        return;
-      }
-
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-    }
-
-    console.warn(`Overlay not found for line ${nodeLine} to start editing.`);
+    const node = this.getNodeByLine(nodeLine);
+    if (node) await editNodeContent(this, node);
   }
 
   private scheduleEditModeForNodeByLine(nodeLine: number): void {
@@ -2393,24 +2376,13 @@ export class MindmapView extends TextFileView {
     window.setTimeout(startAfterOverlayUpdate, 350);
   }
 
+  /** Headings remain readable, but the handwriting canvas never opens text
+   * fields. Existing headings can still be maintained in Obsidian's Markdown
+   * editor outside this plugin. */
   public async enterEditModeForHeadingByLine(
-    headingLine: number,
-    selectHeadingTextOnly: boolean = false
+    _headingLine: number, _selectHeadingTextOnly = false
   ): Promise<void> {
-    for (let i = 0; i < 60; i++) {
-      const frame = this.wrapper?.querySelector<HTMLElement>(`[data-heading-frame][data-heading-line="${headingLine}"]`);
-      if (frame && !this.isUpdatingOverlays) {
-        const section = parseHeadingSections(this.data).find(candidate => candidate.line === headingLine);
-        if (!section) return;
-
-        startHeadingEditing(frame, section, this, { selectHeadingTextOnly });
-        return;
-      }
-
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-    }
-
-    console.warn(`Heading frame not found for line ${headingLine} to start editing.`);
+    new Notice('Le intestazioni sono in sola lettura nella mappa EOME.');
   }
 
   private scheduleEditModeForHeadingByLine(headingLine: number): void {

@@ -2,7 +2,8 @@ import { Menu } from 'obsidian';
 import type { MindmapView } from './mindmap-view';
 import type { EomeRelation, RelationArrowMode, RelationKind } from './relations';
 import { RELATION_KINDS, relationNodeKey } from './relations';
-import { atFraction, fractionNearest, routeRelations, type RouteNode, type RoutePoint } from './relations-routing';
+import { atFraction, fractionNearest, routeRelations, type RouteNode, type RoutePoint,
+  type RoutingResult } from './relations-routing';
 import type { OutlineNode } from '../utils/outline';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -115,6 +116,29 @@ function uniqueRenderedNodes(view: MindmapView): RouteNode[] {
   return output;
 }
 
+/** Shared path/arrow painting for the full editor and the read-only
+ * Markdown code-block preview. The preview does not install hit controls. */
+export function appendRelationGeometry(
+  svg: SVGSVGElement, routes: RoutingResult, color: string
+): void {
+  const doc = svg.ownerDocument;
+  for (const segment of routes.segments) {
+    const line = doc.createElementNS(SVG, 'line');
+    line.classList.add('eome-relation-line');
+    line.setAttribute('x1', String(segment.a.x));
+    line.setAttribute('y1', String(segment.a.y));
+    line.setAttribute('x2', String(segment.b.x));
+    line.setAttribute('y2', String(segment.b.y));
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '1.7');
+    line.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(line);
+  }
+  for (const route of routes.paths) {
+    arrowShapes(svg, route.relation, route.points, color);
+  }
+}
+
 /** A separate SVG layer renders only explicit pair relations. Dagre continues
  * to position nodes; legacy 0.2.8 links remain drawn by Cytoscape until the
  * user deliberately replaces that incoming relation.
@@ -133,20 +157,8 @@ export function renderRelationsOverlay(view: MindmapView): void {
   svg.setAttribute('viewBox', '0 0 ' + Math.max(1, view.wrapper.clientWidth) + ' ' + Math.max(1, view.wrapper.clientHeight));
   const color = doc.defaultView?.getComputedStyle(view.wrapper).getPropertyValue('--text-normal').trim() || '#424242';
   const routes = routeRelations(uniqueRenderedNodes(view), view.relations);
-  for (const segment of routes.segments) {
-    const line = doc.createElementNS(SVG, 'line');
-    line.classList.add('eome-relation-line');
-    line.setAttribute('x1', String(segment.a.x));
-    line.setAttribute('y1', String(segment.a.y));
-    line.setAttribute('x2', String(segment.b.x));
-    line.setAttribute('y2', String(segment.b.y));
-    line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', '1.7');
-    line.setAttribute('stroke-linecap', 'round');
-    svg.appendChild(line);
-  }
+  appendRelationGeometry(svg, routes, color);
   for (const route of routes.paths) {
-    arrowShapes(svg, route.relation, route.points, color);
     const hit = doc.createElementNS(SVG, 'path');
     hit.classList.add('eome-relation-hit');
     hit.setAttribute('d', pathData(route.points));

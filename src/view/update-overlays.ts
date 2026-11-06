@@ -1,3 +1,4 @@
+import { Notice } from 'obsidian';
 import { parseOutline, OutlineNode } from '../utils/outline';
 import { parseHeadingSections } from '../utils/heading-sections';
 import { MindmapView } from './mindmap-view';
@@ -119,7 +120,7 @@ function performOverlayUpdate(view: MindmapView): void {
   const validLines = new Set(flatCurrent.map(n => n.line));
   const getCurrentNodeByLine = (line: number): OutlineNode | undefined => flatCurrent.find(n => n.line === line);
   renderHeadingFrames(view.wrapper, view.cy!, parseHeadingSections(view.data), view.sizeMap, {
-    onEdit: (section, frame) => startHeadingEditing(frame, section, view),
+    onEdit: () => { new Notice('In EOME le intestazioni sono in sola lettura. Usa l’editor Markdown di Obsidian per modificarle.'); },
     onEmptyHeadingCreate: (section) => {
       void view.executeCreateNodeInEmptyHeadingCommand(section.line);
     },
@@ -364,11 +365,7 @@ function performOverlayUpdate(view: MindmapView): void {
       e.preventDefault();
 
       view.dismissNodeContextMenu();
-      if (extractDrawingLink(nodeToUse.text)) {
-        void editNodeContent(view, nodeToUse);
-      } else {
-        startNodeEditing(box, nodeToUse, view);
-      }
+      void editNodeContent(view, nodeToUse);
     });
 
     // Prevent internal elements from starting their own drag operations
@@ -405,7 +402,7 @@ function performOverlayUpdate(view: MindmapView): void {
       if (!edit.box.isConnected) return;
       view.pendingEditNodeLine = null;
       view.clearSelection();
-      startNodeEditing(edit.box, edit.node, view, { isNewNode: true });
+      void editNodeContent(view, edit.node);
     });
   }
 }

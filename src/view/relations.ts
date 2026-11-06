@@ -78,12 +78,13 @@ export function findRelationForPair(relations: readonly EomeRelation[], source: 
 }
 
 export function createOrUpdateRelation(relations: readonly EomeRelation[], source: string,
-  target: string, kind: RelationKind): EomeRelation[] {
+  target: string, kind: RelationKind, arrow?: RelationArrowMode): EomeRelation[] {
   if (source === target) return [...relations];
   const existing = findRelationForPair(relations, source, target);
-  if (existing) return relations.map((rel) => rel.id === existing.id ? { ...rel, kind } : rel);
+  if (existing) return relations.map((rel) => rel.id === existing.id ?
+    { ...rel, kind, ...(arrow ? { arrow, arrowAt: undefined } : {}) } : rel);
   const id = 'rel-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 11);
-  return [...relations, { id, source, target, kind, arrow: 'none' }];
+  return [...relations, { id, source, target, kind, arrow: arrow ?? 'none' }];
 }
 
 export function setRelationArrow(relations: readonly EomeRelation[], id: string,

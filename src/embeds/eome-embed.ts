@@ -15,6 +15,9 @@ import { parseHeadingSections } from '../utils/heading-sections';
 import { sortByMarkdownOrder } from '../utils/cytoscape';
 import { renderHeadingFrames } from '../view/heading-frames';
 import { arrangeTopLevelTrees } from '../view/tree-layout';
+import { hasExplicitRelationSchema, readRelations, relationNodeKey, type EomeRelation } from '../view/relations';
+import { routeRelations, type RouteNode } from '../view/relations-routing';
+import { appendRelationGeometry } from '../view/relations-overlay';
 
 cytoscape.use(dagre);
 
@@ -176,6 +179,7 @@ async function renderOverlays(
     const box = createDiv();
     box.className = 'mindmap-overlay mindmap-eome-overlay';
     box.dataset.mindmapEomeOverlay = '1';
+    box.dataset.nodeLine = String(node.line);
     box.setCssProps({
       '--mindmap-left': `${position.x}px`,
       '--mindmap-top': `${position.y}px`,
@@ -206,6 +210,58 @@ async function renderOverlays(
   }
 }
 
+/** Read-only live preview: render the same explicit vector routes and arrows
+ * as the editor. The Markdown source note remains the only editable copy.
+ * No PDF/SVG export is involved.
+ */
+function renderEmbeddedRelations(
+  plugin: MindmapPlugin, file: TFile, wrapper: HTMLElement,
+  cy: cytoscape.Core, flat: OutlineNode[],
+  sizes: Map<number, { w: number; h: number }>,
+  relations: EomeRelation[]
+): void {
+  wrapper.querySelector('svg.eome-relations-layer')?.remove();
+  if (!relations.length) return;
+  const counts = new Map<string, number>();
+  for (const node of flat) {
+    const key = relationNodeKey(plugin.app, file, node);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const bounds = wrapper.getBoundingClientRect();
+  const nodes: RouteNode[] = [];
+  for (const node of flat) {
+    const key = relationNodeKey(plugin.app, file, node);
+    if (counts.get(key) !== 1) continue;
+    const cyNode = cy.getElementById('n' + node.line);
+    if (!cyNode || cyNode.empty()) continue;
+    const position = cyNode.renderedPosition();
+    const dim = sizes.get(node.line) ?? { w: 80, h: 40 };
+    const image = wrapper.querySelector<HTMLImageElement>(
+      '.mindmap-eome-overlay[data-node-line="' + node.line + '"] img');
+    const rect = image?.getBoundingClientRect();
+    nodes.push({
+      id: key,
+      x: rect ? rect.left + rect.width / 2 - bounds.left : position.x,
+      y: rect ? rect.top + rect.height / 2 - bounds.top : position.y,
+      w: rect?.width ?? dim.w * cy.zoom(),
+      h: rect?.height ?? dim.h * cy.zoom()
+    });
+  }
+  const routes = routeRelations(nodes, relations);
+  const doc = wrapper.ownerDocument;
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('eome-relations-layer');
+  svg.setAttribute('aria-hidden', 'true');
+  const w = Math.max(1, wrapper.clientWidth);
+  const h = Math.max(1, wrapper.clientHeight);
+  svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+  svg.setAttribute('width', String(w));
+  svg.setAttribute('height', String(h));
+  const color = doc.defaultView?.getComputedStyle(wrapper).getPropertyValue('--text-normal').trim() || '#424242';
+  appendRelationGeometry(svg, routes, color);
+  wrapper.appendChild(svg);
+}
+
 function renderError(el: HTMLElement, message: string): void {
   el.empty();
   el.createDiv({ cls: 'mindmap-eome-error', text: message });
@@ -234,6 +290,8 @@ export async function renderMindmapEomeEmbed(
   }
 
   const markdown = await plugin.app.vault.read(file);
+  const explicitConnections = hasExplicitRelationSchema(plugin.app, file);
+  const relations = explicitConnections ? readRelations(plugin.app, file) : [];
   if (!isOutlineCompatible(markdown)) {
     renderError(el, `mindmap-eome: ${file.name} is not a compatible mindmap outline.`);
     return;
@@ -272,6 +330,7 @@ export async function renderMindmapEomeEmbed(
   const elements = buildElements(flat, sizeMap);
   const layoutOptions = {
     name: 'dagre',
+    rankDir: 'LR',
     fit: false,
     padding: 24,
     nodeDimensionsIncludeLabels: false,
@@ -293,8 +352,7 @@ export async function renderMindmapEomeEmbed(
         selector: 'node',
         style: {
           'shape': 'rectangle',
-          'background-opacity': 0.01,
-          'background-color': '#ffffff',
+          'background-opacity': 0,
           width: 'data(width)',
           height: 'data(height)',
         },
@@ -305,6 +363,7 @@ export async function renderMindmapEomeEmbed(
           width: 1,
           'line-color': '#000000',
           'curve-style': 'straight',
+          'opacity': explicitConnections ? 0 : 1,
         },
       },
     ],
@@ -314,7 +373,11 @@ export async function renderMindmapEomeEmbed(
     arrangeTopLevelTrees(cy, roots, sizeMap, 'vertical', 160);
     cy.fit(cy.elements(), 28);
     cy.center(cy.elements());
-    void renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap);
+    void renderOverlays(plugin, child, file, wrapper, cy, flat, sizeMap).then(() => {
+      if (explicitConnections && wrapper.isConnected && !cy.destroyed()) {
+        renderEmbeddedRelations(plugin, file, wrapper, cy, flat, sizeMap, relations);
+      }
+    });
   });
 
   cy.layout(layoutOptions).run();

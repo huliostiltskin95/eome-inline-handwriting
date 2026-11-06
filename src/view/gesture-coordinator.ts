@@ -1,6 +1,5 @@
 import { Notice } from 'obsidian';
 import { isMoveTargetInsideSourceSubtree } from '../domain/mindmap-file';
-import { startNodeEditing } from '../editor/node-editing';
 import { editNodeContent } from '../drawing/drawing-actions';
 import { extractDrawingLink } from '../drawing/drawing-link';
 import type { MindmapView } from './mindmap-view';
@@ -534,9 +533,7 @@ export class MindmapGestureCoordinator {
       this.transition('edit');
       return;
     }
-    const editor = startNodeEditing(box, node, this.view);
-    if (!editor) return;
-    this.transition('edit');
+    new Notice('I nodi testuali preesistenti sono in sola lettura nella mappa.');
   }
 
   private armLongPress(contact: DirectContact): void {

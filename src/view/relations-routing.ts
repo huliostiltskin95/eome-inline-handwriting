@@ -78,8 +78,30 @@ function pathCost(points: readonly RoutePoint[], obstacles: RouteNode[]): number
   return cost;
 }
 
+/**
+ * Endpoint anchors sit just outside the visible handwriting, never at the
+ * centre of the glyph. A small buffer avoids arrowheads touching ink.
+ */
+export function sideAnchors(source: RouteNode, target: RouteNode): { start: RoutePoint; end: RoutePoint } {
+  const toRight = target.x >= source.x;
+  return {
+    start: point(source.x + (toRight ? 1 : -1) * (source.w / 2 + 7), source.y),
+    end: point(target.x - (toRight ? 1 : -1) * (target.w / 2 + 7), target.y)
+  };
+}
+
 function elbow(a: RoutePoint, b: RoutePoint, obstacles: RouteNode[]): RoutePoint[] {
-  if (Math.abs(a.x - b.x) < 1 || Math.abs(a.y - b.y) < 1) return [a, b];
+  if (Math.abs(a.x - b.x) < 1) return [a, b];
+  if (Math.abs(a.y - b.y) < 1) {
+    // A genuine one-corner L requires a height difference. When Dagre puts
+    // two nodes on the same row, use a small orthogonal detour rather than
+    // allowing the "detail/cause" relationship to look horizontal.
+    const gap = 24;
+    const mid = point((a.x + b.x) / 2, a.y);
+    const up = [a, mid, point(mid.x, a.y - gap), point(b.x, a.y - gap), b];
+    const down = [a, mid, point(mid.x, a.y + gap), point(b.x, a.y + gap), b];
+    return pathCost(up, obstacles) <= pathCost(down, obstacles) ? up : down;
+  }
   const horizontalFirst = [a, point(b.x, a.y), b];
   const verticalFirst = [a, point(a.x, b.y), b];
   return pathCost(horizontalFirst, obstacles) <= pathCost(verticalFirst, obstacles)
@@ -87,10 +109,14 @@ function elbow(a: RoutePoint, b: RoutePoint, obstacles: RouteNode[]): RoutePoint
 }
 
 function sharedStemX(source: RouteNode, children: RouteNode[], obstacles: RouteNode[]): number {
-  const nearest = Math.min(...children.map(n => n.x));
-  const room = nearest - source.x;
-  if (Math.abs(room) < 36) return round((nearest + source.x) / 2);
-  const candidates = [0.27, 0.38, 0.5, 0.62].map(t => round(source.x + t * room));
+  const faces = children.map(child => sideAnchors(source, child));
+  const origin = faces[0].start.x;
+  const nearest = faces.reduce((best, face) =>
+    Math.abs(face.end.x - origin) < Math.abs(best - origin) ? face.end.x : best,
+    faces[0].end.x);
+  const room = nearest - origin;
+  if (Math.abs(room) < 36) return round((nearest + origin) / 2);
+  const candidates = [0.27, 0.38, 0.5, 0.62].map(t => round(origin + t * room));
   let best = candidates[0], bestCost = Infinity;
   for (const x of candidates) {
     const stroke = [point(x, Math.min(source.y, ...children.map(n => n.y))),
@@ -158,14 +184,19 @@ export function routeRelations(nodes: readonly RouteNode[], relations: readonly 
   const paths: RoutedRelation[] = [];
   for (const relation of valid) {
     const source = indexed.get(relation.source)!, target = indexed.get(relation.target)!;
-    const a = point(source.x, source.y), b = point(target.x, target.y);
+    const { start: a, end: b } = sideAnchors(source, target);
     const obstacles = nodes.filter(n => n.id !== source.id && n.id !== target.id);
     const geometry = relation.kind === 'figlio' || relation.kind === 'conseguenza' ? 'horizontal' : 'elbow';
     let points: RoutePoint[];
     if (geometry === 'horizontal') {
       const stem = stems.get(relation.source);
-      points = stem === undefined ? [a, b] :
-        [a, point(stem, a.y), point(stem, b.y), b];
+      // The visible link always leaves and enters horizontally at the outer
+      // side of the SVG. When rows differ, one shared vertical stem joins
+      // horizontal exits and never crosses the written words.
+      points = stem === undefined
+        ? (Math.abs(a.y - b.y) < 1 ? [a, b] :
+          [a, point((a.x + b.x) / 2, a.y), point((a.x + b.x) / 2, b.y), b])
+        : [a, point(stem, a.y), point(stem, b.y), b];
     } else {
       points = elbow(a, b, obstacles);
     }

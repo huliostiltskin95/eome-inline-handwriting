@@ -67,10 +67,10 @@ function buildView(options: { excalidrawPaths?: string[]; links?: Record<string,
 }
 
 describe('routing the Edit action by node content', () => {
-  it('edits a plain node as text', async () => {
+  it('keeps existing text nodes read-only', async () => {
     const { view, trace } = buildView();
     await editNodeContent(view, node('Just an idea'));
-    expect(trace.editedLines).toEqual([7]);
+    expect(trace.editedLines).toEqual([]);
     expect(trace.openedPaths).toEqual([]);
   });
 
@@ -97,13 +97,13 @@ describe('routing the Edit action by node content', () => {
     expect(trace.editedLines).toEqual([]);
   });
 
-  it('falls back to text editing for an embed that is not a drawing', async () => {
+  it('does not create a text input for arbitrary embeds', async () => {
     const other = file('Notes/Some note.md');
     const { view, trace } = buildView({ links: { 'Some note': other } });
 
     await editNodeContent(view, node('![[Some note]]'));
 
-    expect(trace.editedLines).toEqual([7]);
+    expect(trace.editedLines).toEqual([]);
     expect(trace.openedPaths).toEqual([]);
   });
 });

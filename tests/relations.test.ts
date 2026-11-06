@@ -68,6 +68,34 @@ describe('routing mode compatibility', () => {
   });
 });
 
+describe('side-of-handwriting attachment', () => {
+  it('starts and finishes parallel connections outside the visible SVG', async () => {
+    const { routeRelations } = await import('../src/view/relations-routing');
+    const nodes = [
+      { id: 'a', x: 50, y: 80, w: 60, h: 30 },
+      { id: 'b', x: 210, y: 80, w: 80, h: 30 }
+    ];
+    const route = routeRelations(nodes, [{
+      id: 'ab', source: 'a', target: 'b', kind: 'figlio', arrow: 'end'
+    }]).paths[0];
+    expect(route.points).toHaveLength(2);
+    expect(route.points[0].x).toBe(87);
+    expect(route.points[1].x).toBe(163);
+    expect(route.points.every(p => p.y === 80)).toBe(true);
+  });
+
+  it('uses a visible elbow rather than a straight line for details on the same row', async () => {
+    const { routeRelations } = await import('../src/view/relations-routing');
+    const paths = routeRelations([
+      { id: 'a', x: 50, y: 80, w: 60, h: 30 },
+      { id: 'b', x: 210, y: 80, w: 80, h: 30 }
+    ], [{ id: 'ab', source: 'a', target: 'b', kind: 'dettaglio', arrow: 'none' }]).paths;
+    expect(paths[0].geometry).toBe('elbow');
+    expect(paths[0].points.length).toBeGreaterThanOrEqual(4);
+    expect(paths[0].points.some(p => p.y !== 80)).toBe(true);
+  });
+});
+
 describe('orthogonal routing for pair relationships', () => {
   const nodes = [
     { id: 'svg:NOTA.svg', x: 30, y: 100, w: 60, h: 24 },

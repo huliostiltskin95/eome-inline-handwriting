@@ -284,7 +284,8 @@ export function editNodeContent(view: MindmapView, node: OutlineNode): Promise<v
   if (view.file && resolveExcalidrawEmbed(view.app, node.text, view.file.path)) {
     return editExcalidrawDrawing(view, node);
   }
-  return view.enterEditModeForNodeByLine(node.line);
+  new Notice('EOME accetta soltanto note manoscritte. Il testo preesistente resta visibile in sola lettura.');
+  return Promise.resolve();
 }
 
 export async function editExcalidrawDrawing(view: MindmapView, node: OutlineNode): Promise<void> {
@@ -310,7 +311,8 @@ async function createBlankRelativeDrawing(
   view: MindmapView,
   node: OutlineNode,
   placement: 'child' | 'sibling',
-  kind?: RelationKind
+  kind?: RelationKind,
+  arrow: import('../view/relations').RelationArrowMode = 'none'
 ): Promise<BlankDrawing | null> {
   const sourcePath = view.file?.path;
   if (!sourcePath) return null;
@@ -336,7 +338,7 @@ async function createBlankRelativeDrawing(
     const newNode = view.getFlatNodes().find((candidate) => candidate.text === embed);
     if (newNode) {
       view.selectNode(newNode.line);
-      if (kind) await view.addRelation(liveTarget, newNode, kind);
+      if (kind) await view.addRelation(liveTarget, newNode, kind, arrow);
     }
     return { attachment, embed };
   } catch (error) {
@@ -392,11 +394,14 @@ export async function addBlankDrawingAsChild(view: MindmapView, node: OutlineNod
  * the Markdown note retains a useful outline and Dagre can lay out the map.
  */
 export async function addBlankDrawingWithRelation(
-  view: MindmapView, node: OutlineNode, kind: RelationKind
+  view: MindmapView, node: OutlineNode, kind: RelationKind,
+  arrow: import('../view/relations').RelationArrowMode = 'none'
 ): Promise<void> {
-  await createBlankRelativeDrawing(view, node, 'child', kind);
+  await createBlankRelativeDrawing(view, node, 'child', kind, arrow);
 }
 
 export async function addBlankDrawingAsSibling(view: MindmapView, node: OutlineNode): Promise<void> {
-  await createBlankRelativeDrawing(view, node, 'sibling');
+  // UI compatibility: a new sibling from older commands is now a visual
+  // parallel linked node, not an unconnected editable text placeholder.
+  await createBlankRelativeDrawing(view, node, 'child', 'figlio');
 }

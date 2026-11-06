@@ -33,7 +33,7 @@ L'organizzazione deve ricordare per leggibilità una mappa Coggle, ma usare **se
 
 - Ogni nodo manoscritto conserva un **SVG nativo modificabile**, con sfondo trasparente, pressione e tratti vettoriali preservati.
 - Dimensione visiva e spaziatura dipendono dai **limiti effettivi della grafia**; il rettangolo invisibile per i gesti non deve comparire nella mappa.
-- Il punto di partenza logico dei collegamenti a L coincide con il **centro geometrico della grafia** del nodo di origine, non con il centro di una vecchia scheda o con i margini del canvas SVG vuoto.
+- **Rettifica 0.3.3:** tutti i collegamenti partono dal **lato esterno della grafia**, all'altezza del suo centro verticale, con piccolo margine di sicurezza. La richiesta precedente di partenza dal centro geometrico è superata.
 - Per non coprire i tratti manoscritti, il rendering deve gestire l'eventuale segmento sotto la grafia (ad esempio interrompendolo al contorno visivo), mantenendo la relazione geometricamente ancorata al centro richiesto.
 - Il riadattamento dei nodi non deve cambiare gli identificatori né disassociare le frecce.
 
@@ -125,3 +125,13 @@ Per accettare il risultato:
 4. **Test strutturali, grafici e su iPad** prima della release BRAT.
 
 **Stato 0.3.2:** prima implementazione completata nei sorgenti e compilata con test automatici. Rimangono aperti: collaudo iPad/Apple Pencil; risoluzione avanzata degli incroci e degli ostacoli; gestione delle rinomine dei file SVG; identità persistente per testi identici; verifica delle esportazioni con il nuovo SVG layer. Le mappe preesistenti conservano la visualizzazione legacy se non è presente `eome-relations-v1`; attivando le relazioni esplicite, gli archi precedenti non vengono convertiti e non vengono visualizzati.
+
+
+## Rettifica 0.3.3 — Penna/mouse e creazione rapida
+
+- Nel canvas EOME non si possono inserire né modificare **campi testuali**. Tutti i nuovi nodi sono SVG editabili con Apple Pencil o mouse; i nodi di testo preesistenti restano visibili in sola lettura.
+- Il menu contestuale di creazione offre **Parallelo —** e **A L**, ciascuno con **nessuna freccia, freccia all'inizio, alla fine o doppia**. I tipi semantici più specifici rimangono impostabili nel menu del collegamento esistente.
+- Il routing deve partire dal **bordo laterale del disegno**, non dal centro; in caso di quote differenti si usa una dorsale ortogonale condivisibile.
+- I blocchi `mindmap-eome` che contengono il percorso della nota Markdown mostrano un'anteprima vettoriale read-only dei collegamenti espliciti; l'editing avviene aprendo la mappa completa.
+- Lo strumento Collega accetta trascinamento sia con penna sia con mouse; la scrittura diretta su SVG accetta i medesimi dispositivi.
+- Limiti: per l'ancoraggio viene usato il bordo dell'immagine SVG, non il contorno preciso di ogni tratto; resta da collaudare il comportamento nell'interfaccia iPad e minimizzare globalmente gli incroci.

@@ -19,7 +19,7 @@ export class RelationGestureController {
   constructor(private readonly view: MindmapView, private readonly wrapper: HTMLElement) {}
 
   pointerDown(event: PointerEvent): boolean {
-    if (!this.view.connectionMode || event.pointerType !== 'pen' || event.button !== 0 ||
+    if (!this.view.connectionMode || (event.pointerType !== 'pen' && event.pointerType !== 'mouse') || event.button !== 0 ||
         this.session) return false;
     const target = event.target as Element | null;
     if (!target || typeof target.closest !== 'function' ||

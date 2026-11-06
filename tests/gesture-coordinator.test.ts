@@ -340,7 +340,7 @@ describe('mindmap direct-input coordinator', () => {
     vi.useRealTimers();
   });
 
-  it('selects on completed up and edits after exactly two completed Pencil taps', () => {
+  it('selects on single Pencil tap without opening a text editor on double tap', () => {
     const { coordinator, wrapper, ownerWindow, source, view } = fixture();
     const firstDown = pointerEvent(source);
     wrapper.emit('pointerdown', firstDown as unknown as Event);
@@ -354,8 +354,8 @@ describe('mindmap direct-input coordinator', () => {
     expect(startNodeEditingMock).not.toHaveBeenCalled();
     ownerWindow.emit('pointerup', pointerEvent(source, { pointerId: 2, buttons: 0 }) as unknown as Event);
 
-    expect(startNodeEditingMock).toHaveBeenCalledTimes(1);
-    expect(coordinator.getMode()).toBe('edit');
+    expect(startNodeEditingMock).not.toHaveBeenCalled();
+    expect(coordinator.getMode()).toBe('idle');
     coordinator.destroy();
   });
 
