@@ -49,7 +49,9 @@ async function openMapDrawing(context: InlineContext, items: ExportedDrawingItem
     existing.dispatchEvent(new CustomEvent('eome-tool', { detail: tool }));
     return null;
   }
-  const panel = tab.createDiv({ cls: 'eome-map-drawing-panel' });
+  const pane = tab.querySelector<HTMLElement>('.eome-scoped-lower-pane') ?? tab;
+  const panel = pane.createDiv({ cls: 'eome-map-drawing-panel' });
+  tab.dispatchEvent(new CustomEvent('eome-editor-opened', { detail: panel }));
   try {
     return await openDrawingModal(context.plugin.app, items, close => {
       const observer = new MutationObserver(() => { if (!panel.isConnected) close(); });
