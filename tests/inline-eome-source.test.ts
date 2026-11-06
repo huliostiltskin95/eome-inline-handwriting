@@ -9,7 +9,7 @@ describe('embedded handwritten mindmap fenced block', () => {
       '```mindmap-eome', '- ![[a.svg]]', '<!-- eome-map-id: one-map-123 -->', '```',
       '', 'Un altro paragrafo', '', '```mindmap-eome',
       '- ![[b.svg]]', '<!-- eome-map-id: two-map-456 -->', '```',
-    ].join('\\n');
+    ].join('\n');
     expect(findInlineFenceAtLine(markdown, 7)?.content).toContain('a.svg');
     expect(findInlineFenceAtLine(markdown, 13)?.content).toContain('b.svg');
     expect(findInlineFenceAtLine(markdown, 4)).toBeNull();
